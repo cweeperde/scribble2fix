@@ -11,11 +11,11 @@
 [![Stars](https://img.shields.io/github/stars/cweeperde/scribble2fix?style=flat-square&color=f5b301)](https://github.com/cweeperde/scribble2fix/stargazers)
 [![License: PolyForm Strict](https://img.shields.io/badge/license-PolyForm%20Strict-ff3b30?style=flat-square)](#license)
 [![Works with Claude](https://img.shields.io/badge/works%20with-Claude-D97757?style=flat-square&logo=claude&logoColor=white)](#built-for-claude-and-codex)
-[![Works with Codex](https://img.shields.io/badge/works%20with-Codex-412991?style=flat-square&logo=openai&logoColor=white)](#built-for-claude-and-codex)
+[![Works with Codex](https://img.shields.io/badge/works%20with-Codex-412991?style=flat-square&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyLjYiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI%2BPHBhdGggZD0iTTMgNmw2IDYtNiA2TTEyIDE5aDkiLz48L3N2Zz4%3D&logoColor=white)](#built-for-claude-and-codex)
 
 <br>
 
-[![Download for Windows](https://img.shields.io/badge/Windows-Download-0078D4?style=for-the-badge&logo=windows11&logoColor=white)](https://github.com/cweeperde/scribble2fix/releases/latest/download/Scribble2Fix-windows-x64-setup.exe)
+[![Download for Windows](https://img.shields.io/badge/Windows-Download-0078D4?style=for-the-badge&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0id2hpdGUiPjxwYXRoIGQ9Ik0xIDFoMTAuNHYxMC40SDF6TTEyLjYgMUgyM3YxMC40SDEyLjZ6TTEgMTIuNmgxMC40VjIzSDF6TTEyLjYgMTIuNkgyM1YyM0gxMi42eiIvPjwvc3ZnPg%3D%3D&logoColor=white)](https://github.com/cweeperde/scribble2fix/releases/latest/download/Scribble2Fix-windows-x64-setup.exe)
 [![Download for macOS](https://img.shields.io/badge/macOS-Download-000000?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/cweeperde/scribble2fix/releases/latest/download/Scribble2Fix-macos-universal.dmg)
 [![Download for Linux](https://img.shields.io/badge/Linux-Download-FCC624?style=for-the-badge&logo=linux&logoColor=black)](https://github.com/cweeperde/scribble2fix/releases/latest/download/Scribble2Fix-linux-x86_64.AppImage)
 
@@ -244,7 +244,7 @@ To remove it: `claude mcp remove --scope user scribble2fix` or `codex mcp remove
 
 ### Windows
 
-[![Download for Windows](https://img.shields.io/badge/Download-.exe-0078D4?style=for-the-badge&logo=windows11&logoColor=white)](https://github.com/cweeperde/scribble2fix/releases/latest/download/Scribble2Fix-windows-x64-setup.exe)
+[![Download for Windows](https://img.shields.io/badge/Download-.exe-0078D4?style=for-the-badge&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0id2hpdGUiPjxwYXRoIGQ9Ik0xIDFoMTAuNHYxMC40SDF6TTEyLjYgMUgyM3YxMC40SDEyLjZ6TTEgMTIuNmgxMC40VjIzSDF6TTEyLjYgMTIuNkgyM1YyM0gxMi42eiIvPjwvc3ZnPg%3D%3D&logoColor=white)](https://github.com/cweeperde/scribble2fix/releases/latest/download/Scribble2Fix-windows-x64-setup.exe)
 
 1. Run the installer.
 2. On a SmartScreen warning click **More info → Run anyway** (the app isn't code-signed yet).
