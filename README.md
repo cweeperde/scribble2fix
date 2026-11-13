@@ -17,7 +17,7 @@
 
 [![Download for Windows](https://img.shields.io/badge/Windows-Download-0078D4?style=for-the-badge&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0id2hpdGUiPjxwYXRoIGQ9Ik0xIDFoMTAuNHYxMC40SDF6TTEyLjYgMUgyM3YxMC40SDEyLjZ6TTEgMTIuNmgxMC40VjIzSDF6TTEyLjYgMTIuNkgyM1YyM0gxMi42eiIvPjwvc3ZnPg%3D%3D&logoColor=white)](https://github.com/cweeperde/scribble2fix/releases/latest/download/Scribble2Fix-windows-x64-setup.exe)
 [![Download for macOS](https://img.shields.io/badge/macOS-Download-000000?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/cweeperde/scribble2fix/releases/latest/download/Scribble2Fix-macos-universal.dmg)
-[![Download for Linux](https://img.shields.io/badge/Linux-Download-FCC624?style=for-the-badge&logo=linux&logoColor=black)](https://github.com/cweeperde/scribble2fix/releases/latest/download/Scribble2Fix-linux-x86_64.AppImage)
+[![Download for Linux](https://img.shields.io/badge/Linux-Download-FCC624?style=for-the-badge&logo=linux&logoColor=white)](https://github.com/cweeperde/scribble2fix/releases/latest/download/Scribble2Fix-linux-x86_64.AppImage)
 
 <sub>Free for personal use · Windows · macOS (Intel & Apple Silicon) · Linux x86_64</sub>
 
@@ -268,7 +268,7 @@ To remove it: `claude mcp remove --scope user scribble2fix` or `codex mcp remove
 
 ### Linux
 
-[![Download for Linux](https://img.shields.io/badge/Download-AppImage-FCC624?style=for-the-badge&logo=linux&logoColor=black)](https://github.com/cweeperde/scribble2fix/releases/latest/download/Scribble2Fix-linux-x86_64.AppImage)
+[![Download for Linux](https://img.shields.io/badge/Download-AppImage-FCC624?style=for-the-badge&logo=linux&logoColor=white)](https://github.com/cweeperde/scribble2fix/releases/latest/download/Scribble2Fix-linux-x86_64.AppImage)
 
 1. `chmod +x Scribble2Fix-*.AppImage` and run it. Updates itself.
 2. Or install the [.deb](https://github.com/cweeperde/scribble2fix/releases/latest/download/Scribble2Fix-linux-amd64.deb) or [.rpm](https://github.com/cweeperde/scribble2fix/releases/latest/download/Scribble2Fix-linux-x86_64.rpm) with `apt` / `dnf`.
