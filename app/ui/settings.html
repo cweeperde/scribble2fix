@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Scribble2Fix Settings</title>
+<link rel="stylesheet" href="common.css">
+<style>
+  body { padding: 20px 24px 24px; }
+  section { margin-bottom: 22px; }
+  header { display: flex; align-items: baseline; gap: 8px; margin-bottom: 18px; }
+  header .muted { font-size: 12px; }
+  details summary { cursor: pointer; color: var(--accent); font-size: 13px; margin-top: 8px; }
+  .deps { margin: 8px 0 0; padding: 0; list-style: none; font-size: 12px; color: var(--muted); }
+  .deps li { display: flex; justify-content: space-between; padding: 2px 0; }
+  .links { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13px; margin-top: 6px; }
+</style>
+</head>
+<body>
+<header><h1>Scribble2Fix</h1><span class="muted" id="version"></span></header>
+
+<section>
+  <h2>Capture</h2>
+  <p class="muted">Click the box, then press the key or key combination you want to use.</p>
+  <button class="hotkey" id="hotkey"></button>
+  <div class="status" id="hotkey-status"></div>
+  <div class="row">
+    <div class="label">Start at login</div>
+    <label class="switch"><input type="checkbox" id="autostart"><span></span></label>
+  </div>
+  <div class="row">
+    <div class="label">Simple toolbar<small>Only the colors, freehand, box and arrow. Hides text labels, markers, eraser and stroke size.</small></div>
+    <label class="switch"><input type="checkbox" id="simple"><span></span></label>
+  </div>
+  <div class="row">
+    <div class="label">Pause hotkey in fullscreen apps<small>While a game or fullscreen video is in front, the hotkey goes back to that app.</small></div>
+    <label class="switch"><input type="checkbox" id="fullscreen"><span></span></label>
+  </div>
+</section>
+
+<section>
+  <h2>AI tools</h2>
+  <p class="muted">Connecting adds the <code>scribble2fix</code> MCP server and a <code>/scribble</code> command, so the AI can read your captures and ask you for a scribble (it always asks first).</p>
+  <div id="tools"></div>
+  <div class="status" id="tools-status"></div>
+</section>
+
+<section>
+  <h2>Captures &amp; privacy</h2>
+  <div class="row">
+    <div class="label">Keep the last captures<small>Older ones are deleted automatically.</small></div>
+    <input type="number" id="keep" min="1">
+  </div>
+  <div class="row">
+    <div class="label">Never save images<small>Only copy to the clipboard. Deletes saved captures and turns off the AI tools' access.</small></div>
+    <label class="switch"><input type="checkbox" id="never-save"><span></span></label>
+  </div>
+  <div class="row">
+    <div class="label">Copy file path instead of image<small>For tools that read image files but don't accept pasted images.</small></div>
+    <label class="switch"><input type="checkbox" id="copy-path"><span></span></label>
+  </div>
+  <div class="links"><a id="open-captures">Open captures folder</a></div>
+</section>
+
+<section>
+  <h2>Updates</h2>
+  <div class="row">
+    <div class="label">Install updates automatically<small>Checks GitHub at startup.</small></div>
+    <label class="switch"><input type="checkbox" id="auto-update"><span></span></label>
+  </div>
+  <button class="btn" id="check">Check for updates</button>
+  <div class="status" id="update-status"></div>
+</section>
+
+<section>
+  <h2>About</h2>
+  <p>Made by <a data-link="author">cweeper</a>. Free for personal, noncommercial use under the <a data-link="license">PolyForm Strict License</a>.</p>
+  <div class="links">
+    <a data-link="repo">Source code on GitHub</a>
+    <a data-link="issues">Report a problem</a>
+    <a id="welcome">Show welcome again</a>
+  </div>
+  <details>
+    <summary>Open-source components</summary>
+    <ul class="deps">
+      <li><span>Tauri, Wry, Tao and Tauri plugins</span><span>MIT / Apache-2.0</span></li>
+      <li><span>xcap (screen capture)</span><span>Apache-2.0</span></li>
+      <li><span>arboard (clipboard)</span><span>MIT / Apache-2.0</span></li>
+      <li><span>active-win-pos-rs</span><span>MIT / Apache-2.0</span></li>
+      <li><span>image, base64, chrono, dirs</span><span>MIT / Apache-2.0</span></li>
+      <li><span>serde, serde_json</span><span>MIT / Apache-2.0</span></li>
+      <li><span>windows-sys</span><span>MIT / Apache-2.0</span></li>
+    </ul>
+  </details>
+</section>
+
+<script src="guard.js"></script>
+<script src="common.js"></script>
+<script>
+const $ = (id) => document.getElementById(id);
+
+async function load() {
+  const s = await invoke('get_settings');
+  $('version').textContent = 'Version ' + s.version;
+  hotkeyRecorder($('hotkey'), $('hotkey-status'), s.hotkey);
+  $('autostart').checked = s.autostart;
+  $('keep').value = s.keepCaptures;
+  $('keep').max = s.maxKeepCaptures;
+  $('never-save').checked = s.neverSave;
+  $('keep').disabled = $('copy-path').disabled = s.neverSave;
+  $('copy-path').checked = s.copyPath;
+  $('simple').checked = s.simpleToolbar;
+  $('fullscreen').checked = s.pauseInFullscreen;
+  $('auto-update').checked = s.autoUpdate;
+  renderTools(s.tools);
+}
+
+function renderTools(tools) {
+  const box = $('tools');
+  box.textContent = '';
+  for (const t of tools) {
+    const row = document.createElement('div');
+    row.className = 'row';
+    row.innerHTML = '<div class="label"><span></span><small></small></div><label class="switch"><input type="checkbox"><span></span></label>';
+    row.querySelector('.label span').textContent = t.name;
+    row.querySelector('small').textContent = toolStatusText(t);
+    const input = row.querySelector('input');
+    input.checked = t.connected;
+    input.disabled = !t.installed && !t.connected;
+    input.onchange = async () => {
+      input.disabled = true;
+      setStatus($('tools-status'), (input.checked ? 'Connecting ' : 'Disconnecting ') + t.name + '…');
+      try {
+        await invoke('set_tool', { id: t.id, connected: input.checked });
+        setStatus($('tools-status'), input.checked ? `Connected. Restart ${t.name} sessions to use it.` : 'Disconnected.', 'ok');
+      } catch (err) {
+        input.checked = !input.checked;
+        setStatus($('tools-status'), String(err), 'error');
+      }
+      renderTools((await invoke('get_settings')).tools);
+    };
+    box.append(row);
+  }
+}
+
+$('autostart').onchange = (e) => invoke('set_autostart', { on: e.target.checked }).catch(() => { e.target.checked = !e.target.checked; });
+$('keep').onchange = async (e) => {
+  const n = Math.max(1, Math.min(+e.target.max, Math.round(+e.target.value) || 1));
+  e.target.value = n;
+  await invoke('set_keep_captures', { count: n });
+};
+$('never-save').onchange = async (e) => {
+  await invoke('set_never_save', { on: e.target.checked });
+  $('keep').disabled = $('copy-path').disabled = e.target.checked;
+};
+$('copy-path').onchange = (e) => invoke('set_copy_path', { on: e.target.checked });
+$('simple').onchange = (e) => invoke('set_simple_toolbar', { on: e.target.checked });
+$('fullscreen').onchange = (e) => invoke('set_pause_in_fullscreen', { on: e.target.checked });
+$('auto-update').onchange = (e) => invoke('set_auto_update', { on: e.target.checked });
+$('open-captures').onclick = () => invoke('open_captures');
+$('welcome').onclick = () => invoke('show_onboarding');
+for (const a of document.querySelectorAll('[data-link]')) a.onclick = () => invoke('open_link', { which: a.dataset.link });
+
+$('check').onclick = async () => {
+  $('check').disabled = true;
+  setStatus($('update-status'), 'Checking…');
+  try {
+    setStatus($('update-status'), await invoke('update_now'), 'ok');
+  } catch (err) {
+    setStatus($('update-status'), "Couldn't check for updates: " + err, 'error');
+  }
+  $('check').disabled = false;
+};
+
+load();
+</script>
+</body>
+</html>

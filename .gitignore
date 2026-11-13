@@ -1,0 +1,18 @@
+# Build output
+/target/
+
+# Local-only project notes (never commit)
+CLAUDE.md
+PLAN.md
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Tauri generated schemas
+/app/gen/
+
+# Temporary files of docs/mockups/render.sh
+/docs/mockups/build/

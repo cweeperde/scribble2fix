@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Overlay, toast, settings and onboarding windows only need events and the app's own commands.",
+  "windows": ["overlay", "toast", "settings", "onboarding"],
+  "permissions": ["core:default"]
+}

@@ -1,0 +1,34 @@
+name: License request
+description: Ask for permission to use Scribble2Fix commercially, change it or redistribute it
+labels: [license]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Scribble2Fix is free for personal, noncommercial use ([PolyForm Strict 1.0.0](https://github.com/cweeperde/scribble2fix/blob/main/LICENSE)). Anything else needs permission. Tell me what you have in mind.
+  - type: input
+    id: who
+    attributes:
+      label: Who are you?
+      description: Your name, and the company or project if there is one.
+    validations:
+      required: true
+  - type: dropdown
+    id: kind
+    attributes:
+      label: What do you want to do?
+      multiple: true
+      options:
+        - Use it at work or in a company
+        - Change it or build on the code
+        - Redistribute it (bundle, mirror, package)
+        - Something else
+    validations:
+      required: true
+  - type: textarea
+    id: details
+    attributes:
+      label: Details
+      description: How many people would use it, for what, and how you'd like to be contacted if not here.
+    validations:
+      required: true

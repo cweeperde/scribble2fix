@@ -1,0 +1,159 @@
+name: Build
+
+# Every push to main builds Windows, macOS and Linux versions (downloadable
+# from the run's "Artifacts"). Pushing a tag like `v0.1.0` also publishes
+# them as a GitHub Release, plus the `latest.json` the in-app updater reads.
+#
+# Needs the repository secret TAURI_SIGNING_PRIVATE_KEY (the private key that
+# signs updates). Without it the build fails.
+#
+# Changes that only touch the README, docs, license or issue templates don't
+# build anything. (Tag pushes always build: GitHub ignores path filters there.)
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+    paths-ignore: &docs-only
+      - README.md
+      - LICENSE
+      - docs/**
+      - .github/ISSUE_TEMPLATE/**
+  pull_request:
+    paths-ignore: *docs-only
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: windows
+            os: windows-latest
+          - name: macos
+            os: macos-latest
+          - name: linux
+            os: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev \
+            libxdo-dev libssl-dev patchelf libxcb1-dev libxrandr-dev libdbus-1-dev \
+            libpipewire-0.3-dev libwayland-dev libegl-dev libgbm-dev libclang-dev
+
+      - name: Install Rust
+        shell: bash
+        run: |
+          rustup toolchain install stable --profile minimal
+          if [ "$RUNNER_OS" = macOS ]; then rustup target add aarch64-apple-darwin x86_64-apple-darwin; fi
+
+      - uses: Swatinem/rust-cache@v2
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Build app and installers
+        shell: bash
+        working-directory: app
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          if [ "$RUNNER_OS" = macOS ]; then
+            npx --yes @tauri-apps/cli@2 build --target universal-apple-darwin
+          else
+            npx --yes @tauri-apps/cli@2 build
+          fi
+
+      - name: Verify macOS signature
+        if: runner.os == 'macOS'
+        run: |
+          app=target/universal-apple-darwin/release/bundle/macos/Scribble2Fix.app
+          codesign --verify --deep --strict --verbose=2 "$app"
+          codesign -dv "$app" 2>&1 | grep -E "Identifier|Signature"
+
+      - name: Collect files
+        shell: bash
+        run: |
+          mkdir dist
+          bundle=target/release/bundle
+          [ "$RUNNER_OS" = macOS ] && bundle=target/universal-apple-darwin/release/bundle
+          find "$bundle" -maxdepth 2 -type f \( -name '*.msi' -o -name '*-setup.exe' -o -name '*.dmg' \
+            -o -name '*.deb' -o -name '*.rpm' -o -name '*.AppImage' -o -name '*.app.tar.gz' -o -name '*.sig' \) \
+            -exec cp {} dist/ \;
+          ls -la dist
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: scribble2fix-${{ matrix.name }}
+          path: dist/*
+          if-no-files-found: error
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          path: dist
+          merge-multiple: true
+      # Version-free names, so the README can link to releases/latest/download/<name>.
+      - name: Give the downloads stable names
+        working-directory: dist
+        run: |
+          for f in *; do
+            case "$f" in
+              *-setup.exe) n=Scribble2Fix-windows-x64-setup.exe ;;
+              *.msi) n=Scribble2Fix-windows-x64.msi ;;
+              *.dmg) n=Scribble2Fix-macos-universal.dmg ;;
+              *.AppImage) n=Scribble2Fix-linux-x86_64.AppImage ;;
+              *.deb) n=Scribble2Fix-linux-amd64.deb ;;
+              *.rpm) n=Scribble2Fix-linux-x86_64.rpm ;;
+              *) continue ;;
+            esac
+            mv "$f" "$n"
+            [ -f "$f.sig" ] && mv "$f.sig" "$n.sig"
+          done
+          ls -la
+      - name: Write latest.json for the updater
+        env:
+          TAG: ${{ github.ref_name }}
+          BASE: https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}
+        run: |
+          python3 - <<'EOF'
+          import glob, json, os, datetime
+          base, tag = os.environ["BASE"], os.environ["TAG"]
+          def entry(pattern):
+              path = glob.glob(f"dist/{pattern}")[0]
+              return {"signature": open(path + ".sig").read().strip(),
+                      "url": f"{base}/{os.path.basename(path)}"}
+          mac = entry("*.app.tar.gz")
+          latest = {
+              "version": tag.lstrip("v"),
+              "pub_date": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+              "platforms": {
+                  "windows-x86_64": entry("*-setup.exe"),
+                  "darwin-x86_64": mac,
+                  "darwin-aarch64": mac,
+                  "linux-x86_64": entry("*.AppImage"),
+              },
+          }
+          json.dump(latest, open("dist/latest.json", "w"), indent=2)
+          EOF
+          rm dist/*.sig
+          cat dist/latest.json
+      - uses: softprops/action-gh-release@v3
+        with:
+          files: dist/*
+          generate_release_notes: true

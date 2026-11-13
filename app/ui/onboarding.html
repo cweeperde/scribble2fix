@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Welcome to Scribble2Fix</title>
+<link rel="stylesheet" href="common.css">
+<style>
+  html, body { height: 100%; }
+  body { display: flex; flex-direction: column; padding: 28px 32px 22px; }
+  .step { display: none; flex: 1; }
+  .step.on { display: block; animation: step-in 0.38s cubic-bezier(0.2, 0.8, 0.2, 1); }
+  body.back .step.on { animation-name: step-back; }
+  @keyframes step-in { from { opacity: 0; transform: translateX(24px); } to { opacity: 1; transform: none; } }
+  @keyframes step-back { from { opacity: 0; transform: translateX(-24px); } to { opacity: 1; transform: none; } }
+  .step.on > * { animation: rise 0.45s cubic-bezier(0.2, 0.8, 0.2, 1) backwards; }
+  .step.on > :nth-child(2) { animation-delay: 0.04s; }
+  .step.on > :nth-child(3) { animation-delay: 0.08s; }
+  .step.on > :nth-child(4) { animation-delay: 0.12s; }
+  .step.on > :nth-child(n+5) { animation-delay: 0.16s; }
+  @keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+  .step h1 { font-size: 21px; margin-bottom: 8px; }
+  .step > p:first-of-type { color: var(--muted); }
+  ol { margin: 0 0 12px; padding-left: 20px; }
+  ol li { margin: 4px 0; }
+  .keys { display: grid; grid-template-columns: max-content 1fr max-content 1fr; gap: 7px 12px; align-items: center; margin: 2px 0 12px; font-size: 13px; }
+  .keys > :nth-child(odd) { white-space: nowrap; }
+  .recommended { font-size: 11px; font-weight: 600; color: var(--add); margin-left: 6px; }
+  footer { display: flex; align-items: center; gap: 10px; padding-top: 14px; }
+  .dots { flex: 1; display: flex; gap: 6px; }
+  .dots i { width: 7px; height: 7px; border-radius: 4px; background: var(--field); border: 1px solid var(--line); transition: width 0.3s cubic-bezier(0.2, 1.25, 0.35, 1), background-color 0.2s; }
+  .dots i.on { width: 20px; background: var(--accent); border-color: var(--accent); }
+  @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: 1ms !important; transition-duration: 1ms !important; } }
+</style>
+</head>
+<body>
+
+<div class="step on">
+  <h1>Welcome to Scribble2Fix</h1>
+  <p>Scribble on your screen to show an AI coding tool what to change.</p>
+  <ol>
+    <li>Press your hotkey. The screen freezes and you can draw on it.</li>
+    <li>Mark what you want: circle, scribble, draw boxes or arrows.</li>
+    <li>Press <kbd>Enter</kbd>. The annotated screenshot is copied, ready to paste into Claude, Codex or any chat.</li>
+  </ol>
+  <h2>Every color has a meaning</h2>
+  <div class="colors">
+    <span class="dot" style="background:var(--add)"></span><span><b>Add</b> something new here <kbd>1</kbd></span>
+    <span class="dot" style="background:var(--remove)"></span><span><b>Remove</b> this <kbd>2</kbd></span>
+    <span class="dot" style="background:var(--change)"></span><span><b>Change or move</b> this (arrows: from here to there) <kbd>3</kbd></span>
+  </div>
+  <h2>Shortcuts</h2>
+  <div class="keys">
+    <span><kbd>P</kbd></span><span>Freehand</span>
+    <span><kbd>T</kbd></span><span>Text note</span>
+    <span><kbd>B</kbd></span><span>Box</span>
+    <span><kbd>N</kbd></span><span>Numbered marker</span>
+    <span><kbd>A</kbd></span><span>Arrow</span>
+    <span><kbd>E</kbd></span><span>Eraser</span>
+    <span><kbd>Ctrl</kbd> <kbd>Z</kbd></span><span>Undo</span>
+    <span><kbd>+</kbd> <kbd>−</kbd></span><span>Stroke size</span>
+    <span><kbd>Esc</kbd></span><span>Cancel</span>
+    <span><kbd>Enter</kbd></span><span>Copy</span>
+  </div>
+  <p class="muted">Text, numbers, eraser and size are folded away behind the <b>›</b> button in the toolbar.</p>
+</div>
+
+<div class="step">
+  <h1>Your hotkey</h1>
+  <p>Press it anywhere to start a scribble. Click the box to pick a different one.</p>
+  <button class="hotkey" id="hotkey"></button>
+  <div class="status" id="hotkey-status"></div>
+  <div class="row">
+    <div class="label">Start Scribble2Fix at login<small>It waits in the system tray, so your hotkey always works.</small></div>
+    <label class="switch"><input type="checkbox" id="autostart" checked><span></span></label>
+  </div>
+  <p class="muted">You can change all of this later: tray icon → Settings.</p>
+</div>
+
+<div class="step">
+  <h1>Connect your AI tools</h1>
+  <p>Recommended for full functionality. Then:</p>
+  <ul class="muted" style="margin:0 0 14px;padding-left:20px">
+    <li>type <code>/scribble</code> to send your latest capture, without pasting</li>
+    <li>the AI can ask you for a scribble when it needs to see what you mean (it always asks first)</li>
+  </ul>
+  <div id="tools"></div>
+  <div class="status" id="tools-status"></div>
+</div>
+
+<footer>
+  <div class="dots"><i class="on"></i><i></i><i></i></div>
+  <button class="btn" id="back" style="visibility:hidden">Back</button>
+  <button class="btn primary" id="next">Next</button>
+</footer>
+
+<script src="guard.js"></script>
+<script src="common.js"></script>
+<script>
+const $ = (id) => document.getElementById(id);
+const steps = document.querySelectorAll('.step');
+const dots = document.querySelectorAll('.dots i');
+let step = 0, hotkey = '', tools = [];
+
+function show(n) {
+  document.body.classList.toggle('back', n < step);
+  step = n;
+  steps.forEach((s, i) => s.classList.toggle('on', i === n));
+  dots.forEach((d, i) => d.classList.toggle('on', i === n));
+  $('back').style.visibility = n ? '' : 'hidden';
+  $('next').textContent = n === steps.length - 1 ? `Done, try ${prettyHotkey(hotkey)}` : 'Next';
+}
+
+function renderTools() {
+  const box = $('tools');
+  box.textContent = '';
+  for (const t of tools) {
+    const row = document.createElement('div');
+    row.className = 'row';
+    row.innerHTML = '<div class="label"><span></span><small></small></div><label class="switch"><input type="checkbox"><span></span></label>';
+    row.querySelector('.label span').textContent = t.name;
+    if (t.installed) {
+      const tag = document.createElement('span');
+      tag.className = 'recommended';
+      tag.textContent = 'Recommended';
+      row.querySelector('.label span').after(tag);
+    }
+    row.querySelector('small').textContent = t.installed ? 'Found on this computer' : 'Not found. You can connect it later in Settings.';
+    const input = row.querySelector('input');
+    input.checked = t.installed;
+    input.disabled = !t.installed;
+    input.onchange = () => { t.want = input.checked; };
+    t.want = input.checked;
+    box.append(row);
+  }
+}
+
+async function finish() {
+  $('next').disabled = $('back').disabled = true;
+  const failed = [];
+  for (const t of tools.filter((t) => t.want && !t.connected)) {
+    setStatus($('tools-status'), `Connecting ${t.name}…`);
+    try { await invoke('set_tool', { id: t.id, connected: true }); }
+    catch (err) { failed.push(`${t.name}: ${err}`); }
+  }
+  await invoke('set_autostart', { on: $('autostart').checked }).catch(() => {});
+  if (failed.length) {
+    setStatus($('tools-status'), failed.join(' · ') + '. Try again in Settings.', 'error');
+    $('next').textContent = 'Close';
+    $('next').disabled = false;
+    $('next').onclick = () => invoke('close_window');
+    return;
+  }
+  await invoke('close_window');
+}
+
+$('back').onclick = () => show(step - 1);
+$('next').onclick = () => (step < steps.length - 1 ? show(step + 1) : finish());
+
+invoke('get_settings').then((s) => {
+  hotkey = s.hotkey;
+  tools = s.tools;
+  hotkeyRecorder($('hotkey'), $('hotkey-status'), s.hotkey, (h) => { hotkey = h; });
+  renderTools();
+  show(0);
+});
+</script>
+</body>
+</html>

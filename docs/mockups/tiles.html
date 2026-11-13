@@ -1,0 +1,34 @@
+<!doctype html>
+<!--
+  Background for the tool overview (docs/images/tools.png): one card per tool.
+  render.py draws the real marks on it with the overlay.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; overflow: hidden; background: #0b0c10; font: 14px/1.4 "Segoe UI", system-ui, sans-serif; color: #e6e8ee; }
+  #stage { width: 1200px; height: 300px; display: grid; grid-template-columns: repeat(5, 1fr); gap: 16px; padding: 20px; }
+  .card { position: relative; background: #15171c; border: 1px solid #262a33; border-radius: 12px; overflow: hidden; }
+  .ui { position: absolute; inset: 0 0 52px; display: flex; align-items: center; justify-content: center; }
+  .label { position: absolute; left: 0; right: 0; bottom: 0; height: 52px; border-top: 1px solid #22262e; background: #121419;
+    display: flex; align-items: center; justify-content: center; gap: 8px; font-weight: 600; }
+  kbd { font: 600 12px "Segoe UI", system-ui, sans-serif; padding: 2px 7px; border-radius: 5px; background: #262a33; color: #c9ced8; }
+  .btn { display: inline-flex; align-items: center; height: 32px; padding: 0 13px; border-radius: 7px; border: 1px solid #2f3440; background: #1f232b; font-weight: 600; color: #d5d9e2; }
+  .input { width: 150px; height: 32px; border: 1px solid #2b303a; background: #121419; border-radius: 7px; padding: 0 10px; display: flex; align-items: center; color: #8b93a3; }
+  .row { display: flex; flex-direction: column; gap: 10px; }
+  .chip { width: 150px; height: 26px; border-radius: 6px; background: #1f232b; }
+  .icon { width: 34px; height: 34px; border-radius: 9px; background: linear-gradient(135deg, #8aa6ff, #c79bff); }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div class="card"><div class="ui"><span class="btn">Delete account</span></div><div class="label">Freehand <kbd>P</kbd></div></div>
+  <div class="card"><div class="ui"><div class="row"><div class="input">Email</div><div class="input">Password</div></div></div><div class="label">Box <kbd>B</kbd></div></div>
+  <div class="card"><div class="ui" style="justify-content: space-between; padding: 0 26px 0 30px; align-items: flex-end; padding-bottom: 34px;"><div class="icon"></div><div class="chip" style="width: 60px;"></div></div><div class="label">Arrow <kbd>A</kbd></div></div>
+  <div class="card"><div class="ui" style="align-items: flex-start; padding-top: 40px;"><span class="btn">Upload</span></div><div class="label">Text <kbd>T</kbd></div></div>
+  <div class="card"><div class="ui"><div class="row"><div class="chip"></div><div class="chip"></div><div class="chip"></div></div></div><div class="label">Numbers <kbd>N</kbd></div></div>
+</div>
+</body>
+</html>

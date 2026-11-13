@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Scribble2Fix</title>
+<style>
+  html, body {
+    margin: 0; height: 100%; background: transparent; overflow: hidden;
+    display: flex; align-items: center; justify-content: center;
+    font: 14px/1.2 system-ui, -apple-system, "Segoe UI", sans-serif;
+    user-select: none; -webkit-user-select: none; cursor: default;
+  }
+  #toast {
+    display: flex; align-items: center; gap: 10px; max-width: calc(100% - 24px);
+    padding: 11px 18px 11px 14px; border-radius: 999px; color: #fff;
+    background: rgba(30, 30, 34, 0.9); border: 1px solid rgba(255, 255, 255, 0.12);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+    opacity: 0; transform: translateY(12px) scale(0.96); transition: opacity 0.22s, transform 0.4s cubic-bezier(0.2, 1.25, 0.35, 1);
+  }
+  #toast.show { opacity: 1; transform: none; }
+  #icon {
+    flex: none; width: 20px; height: 20px; border-radius: 50%;
+    background: conic-gradient(#34c759 0 33%, #ff3b30 0 66%, #0a84ff 0);
+    -webkit-mask: radial-gradient(circle, transparent 5px, #000 5.5px);
+    mask: radial-gradient(circle, transparent 5px, #000 5.5px);
+  }
+  #text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+</style>
+</head>
+<body>
+<div id="toast"><div id="icon"></div><div id="text"></div></div>
+<script src="guard.js"></script>
+<script>
+const toast = document.getElementById('toast');
+let timer;
+window.__TAURI__.event.listen('toast', ({ payload }) => {
+  clearTimeout(timer);
+  toast.classList.remove('show');
+  if (!payload.ms) return;
+  document.getElementById('text').textContent = payload.text;
+  void toast.offsetWidth; // restart the transition
+  toast.classList.add('show');
+  timer = setTimeout(() => toast.classList.remove('show'), payload.ms);
+});
+</script>
+</body>
+</html>

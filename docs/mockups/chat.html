@@ -1,0 +1,63 @@
+<!doctype html>
+<!--
+  docs/images/chat.png: an AI coding assistant asks for a scribble and uses it.
+  render.py renders it after result.png, which it shows as the thumbnail.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<style>
+  :root { --add: #34c759; --remove: #ff3b30; --change: #0a84ff; --accent: #e8915b; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; overflow: hidden; background: #0b0c10; color: #d7dbe3; font: 14.5px/1.55 "Cascadia Code", Consolas, monospace; }
+  #stage { width: 1000px; height: 600px; padding: 24px; }
+  .win { height: 100%; border-radius: 12px; overflow: hidden; background: #121419; border: 1px solid #262a33; box-shadow: 0 16px 50px rgba(0,0,0,.55); }
+  .bar { height: 40px; background: #1b1e24; border-bottom: 1px solid #262a33; display: flex; align-items: center; gap: 8px; padding: 0 14px; font: 12.5px "Segoe UI", system-ui, sans-serif; color: #8b93a3; }
+  .bar i { width: 11px; height: 11px; border-radius: 50%; background: #3a3f4a; }
+  .bar span { margin-left: 14px; }
+  .body { padding: 20px 26px; display: flex; flex-direction: column; gap: 14px; }
+  .you { color: #fff; background: #1b1e24; border-radius: 8px; padding: 8px 12px; }
+  .you::before { content: "> "; color: #8b93a3; }
+  .ai { padding-left: 18px; position: relative; }
+  .ai::before { content: "●"; position: absolute; left: 0; color: var(--accent); }
+  .tool { padding-left: 18px; position: relative; }
+  .tool::before { content: "●"; position: absolute; left: 0; color: var(--add); }
+  .tool b { color: #fff; }
+  .out { margin: 4px 0 0 4px; padding-left: 16px; border-left: 2px solid #2a2e37; color: #a3abba; }
+  .got { display: flex; gap: 16px; align-items: flex-start; margin-top: 6px; }
+  .got img { width: 330px; border-radius: 6px; border: 1px solid #2a2e37; }
+  .marks { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+  .tag { display: inline-block; width: 72px; font-weight: 700; }
+  .dim { color: #8b93a3; }
+  .diff { color: #8b93a3; font-size: 13px; }
+  .diff .p { color: var(--add); } .diff .m { color: var(--remove); }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div class="win">
+    <div class="bar"><i></i><i></i><i></i><span>~/taskly · AI coding assistant</span></div>
+    <div class="body">
+      <div class="you">clean up the profile page, the buttons are a mess</div>
+      <div class="ai">Which buttons do you mean, and where should they go? I can open Scribble2Fix so you can just mark it. OK?</div>
+      <div class="you">yes</div>
+      <div class="tool"><b>scribble2fix</b> · request_scribble <span class="dim">("Mark the buttons you mean")</span>
+        <div class="out">Press F6 when you're ready…
+          <div class="got">
+            <img src="../images/result.png" alt="">
+            <div class="marks">
+              <span><span class="tag" style="color: var(--remove)">REMOVE</span>"Export legacy CSV"</span>
+              <span><span class="tag" style="color: var(--add)">ADD</span>box: "Add a Save button"</span>
+              <span><span class="tag" style="color: var(--change)">MOVE</span>curved arrow: "Change photo" → next to the name</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="ai">Done: removed the CSV export, added a Save button and moved "Change photo" next to your name.
+        <div class="diff">Edited src/pages/Profile.tsx <span class="p">+14</span> <span class="m">−9</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

@@ -1,0 +1,69 @@
+/* Shared by settings.html and onboarding.html. */
+:root {
+  color-scheme: light dark;
+  --accent: #0a84ff; --add: #34c759; --remove: #ff3b30; --change: #0a84ff;
+  --muted: #6b6b73; --field: #f2f2f5; --line: rgba(0, 0, 0, 0.08); --bg: #fff; --text: #1c1c1e;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --muted: #9a9aa2; --field: #2c2c30; --line: rgba(255, 255, 255, 0.09); --bg: #1c1c1f; --text: #f2f2f5; }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--text); }
+body { font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; user-select: none; -webkit-user-select: none; }
+h1 { font-size: 18px; font-weight: 650; margin: 0 0 4px; }
+h2 { font-size: 13px; font-weight: 600; margin: 0 0 10px; color: var(--muted); }
+p { margin: 0 0 12px; }
+.muted { color: var(--muted); font-size: 13px; }
+code, kbd { font: 12px ui-monospace, SFMono-Regular, Consolas, monospace; }
+kbd { padding: 1px 6px; border-radius: 5px; background: var(--field); border: 1px solid var(--line); }
+a { color: var(--accent); cursor: pointer; text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+.hotkey {
+  all: unset; box-sizing: border-box; width: 100%; height: 44px; border-radius: 10px;
+  display: flex; align-items: center; justify-content: center; cursor: pointer;
+  background: var(--field); font-size: 16px; font-weight: 600; letter-spacing: 0.02em;
+  border: 2px solid transparent;
+}
+.hotkey.listening { border-color: var(--accent); color: var(--accent); }
+.status { min-height: 20px; margin-top: 6px; font-size: 13px; color: var(--muted); }
+.status.error { color: var(--remove); }
+.status.ok { color: var(--add); }
+
+.row { display: flex; align-items: center; gap: 12px; padding: 10px 0; }
+.row + .row { border-top: 1px solid var(--line); }
+.row .label { flex: 1; min-width: 0; }
+.row .label small { display: block; color: var(--muted); font-size: 12px; line-height: 1.35; }
+
+/* Toggle switch: <label class="switch"><input type="checkbox"><span></span></label> */
+.switch { position: relative; flex: none; width: 38px; height: 22px; }
+.switch input { position: absolute; opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; z-index: 1; }
+.switch span { position: absolute; inset: 0; border-radius: 11px; background: var(--field); border: 1px solid var(--line); transition: background 0.15s; }
+.switch span::after {
+  content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%;
+  background: #fff; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3); transition: transform 0.15s;
+}
+.switch input:checked + span { background: var(--accent); border-color: var(--accent); }
+.switch input:checked + span::after { transform: translateX(16px); }
+.switch input:disabled { cursor: default; }
+.switch input:disabled + span { opacity: 0.4; }
+
+button.btn {
+  all: unset; box-sizing: border-box; height: 32px; padding: 0 14px; border-radius: 8px; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center; font-weight: 550;
+  background: var(--field); border: 1px solid var(--line);
+}
+button.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+button.btn { transition: filter 0.15s, transform 0.12s cubic-bezier(0.2, 0.8, 0.2, 1), background-color 0.15s; }
+button.btn:hover:not(:disabled) { filter: brightness(1.08); }
+button.btn:active:not(:disabled) { transform: scale(0.96); }
+.hotkey { transition: border-color 0.2s, color 0.2s, box-shadow 0.2s; }
+.hotkey.listening { box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 22%, transparent); }
+button.btn:disabled { opacity: 0.5; cursor: default; }
+input[type=number] {
+  width: 64px; height: 30px; padding: 0 8px; border-radius: 8px; font: inherit; text-align: right;
+  color: var(--text); background: var(--field); border: 1px solid var(--line);
+}
+
+.colors { display: grid; grid-template-columns: auto 1fr; gap: 8px 12px; align-items: center; margin: 4px 0 14px; }
+.dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }
