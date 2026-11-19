@@ -5,7 +5,7 @@ as the frozen screen, then the marks are drawn with scripted mouse and
 keyboard input, exactly like a user would.
 
 Writes: overlay.png (hero), demo.gif, result.png (the real export),
-tools.png, chat.png, onboarding.png.
+tools.png, chat.png, request.png (the AI request card), onboarding.png.
 
 Usage: python docs/mockups/render.py
 Needs: pip install playwright pillow && python -m playwright install chromium
@@ -39,6 +39,8 @@ window.__TAURI__ = {
       return ctx.getImageData(0, 0, img.width, img.height).data;
     }
     if (cmd === 'finish_capture') window.__export = args;
+    // The real window disappears here: show the screen as it is underneath.
+    if (cmd === 'hide_overlay') document.getElementById('mock-screen').style.display = 'block';
     return null;
   } },
   event: { listen: async (name, cb) => { if (name === 'capture') window.__capture = cb; } },
@@ -56,10 +58,13 @@ addEventListener('DOMContentLoaded', () => {
       padding: 11px 18px 11px 14px; border-radius: 999px; color: #fff; background: rgba(30,30,34,.9); border: 1px solid rgba(255,255,255,.12);
       box-shadow: 0 6px 20px rgba(0,0,0,.3); font: 14px/1.2 system-ui, "Segoe UI", sans-serif; white-space: nowrap; }
     #mock-toast i { width: 20px; height: 20px; border-radius: 50%; background: conic-gradient(#34c759 0 33%, #ff3b30 0 66%, #0a84ff 0);
-      -webkit-mask: radial-gradient(circle, transparent 5px, #000 5.5px); }`;
+      -webkit-mask: radial-gradient(circle, transparent 5px, #000 5.5px); }
+    #mock-toast.go { animation: mock-pop .55s cubic-bezier(.2, 1.4, .35, 1) both; }
+    @keyframes mock-pop { 0% { opacity: 0; transform: translateX(-50%) translateY(14px) scale(.7); } 35% { opacity: 1; }
+      100% { opacity: 1; transform: translateX(-50%); } }`;
   document.head.append(style);
   document.body.insertAdjacentHTML('beforeend',
-    `<img id="mock-screen" src="${window.__BG}"><div id="mock-cursor"></div><div id="mock-key">F6</div><div id="mock-toast"><i></i>Sent to Claude Code, also copied</div>`);
+    `<img id="mock-screen" src="${window.__BG}"><div id="mock-cursor"></div><div id="mock-key">F6</div><div id="mock-toast"><i></i>Sent to Claude, also copied</div>`);
   addEventListener('pointermove', (e) => {
     const c = document.getElementById('mock-cursor');
     c.style.left = e.clientX + 'px';
@@ -177,6 +182,8 @@ def hero_and_demo(browser):
     scene.close()
 
     page = open_overlay(browser, bg, size)
+    # The soft white light sweep turns into hard bands in a GIF's limited palette.
+    page.add_style_tag(content="#shine, #flash { display: none !important; }")
     rec = Recorder(page)
     show(page, "mock-screen")  # the screen as it is before the overlay opens
     rec.hold(700)
@@ -222,7 +229,9 @@ def hero_and_demo(browser):
     page.wait_for_function("!!window.__export")
     show(page, "mock-screen")
     show(page, "mock-toast")
-    rec.snap()
+    page.evaluate("document.getElementById('mock-toast').classList.add('go')")
+    for _ in range(6):
+        rec.snap()
 
     (OUT / "overlay.png").write_bytes(hero)
     export_png = base64.b64decode(page.evaluate("window.__export.annotated"))
@@ -272,12 +281,57 @@ def static_pages(browser):
     page.screenshot(path=str(OUT / "chat.png"))
     page.close()
 
-    # The real onboarding window, dark mode, with the stubbed Tauri API.
+    # The real onboarding window, dark mode, with the stubbed Tauri API, on
+    # the step where the AI tools get connected.
     page = browser.new_page(viewport={"width": 520, "height": 700}, color_scheme="dark")
     page.add_init_script(path=str(HERE / "tauri-stub.js"))
     page.goto(url(UI / "onboarding.html") + "?w=520&h=700")
-    page.wait_for_timeout(400)
+    page.wait_for_timeout(300)
+    page.click("#next")
+    page.click("#next")
+    page.wait_for_timeout(300)
     page.screenshot(path=str(OUT / "onboarding.png"))
+    page.close()
+
+
+# Stand-in for the Tauri API in the request card and glow pages: keeps the
+# event handlers so the script can fire the events.
+EVENTS_STUB = """
+window.__L = {};
+window.__TAURI__ = { core: { invoke: async () => null },
+  event: { listen: async (name, cb) => { window.__L[name] = cb; } } };
+"""
+
+
+def request_card(browser):
+    """The real request card and screen frame over the example app."""
+    size = (1200, 720)
+    scene = browser.new_page(viewport={"width": size[0], "height": size[1]})
+    scene.goto(url(HERE / "scene.html"))
+    bg = scene.screenshot()
+    scene.close()
+
+    page = browser.new_page(viewport={"width": size[0], "height": size[1]})
+    page.add_init_script(EVENTS_STUB)
+    build = HERE / "build"
+    build.mkdir(exist_ok=True)
+    (build / "bg.png").write_bytes(bg)
+    scene_file = build / "request-scene.html"
+    scene_file.write_text(f"""<!doctype html><html><body style="margin:0;overflow:hidden">
+      <img src="bg.png" style="position:fixed;inset:0;width:100%;height:100%">
+      <iframe id="glow" src="{url(UI / 'glow.html')}" style="position:fixed;inset:0;width:100%;height:100%;border:0;background:transparent" allowtransparency></iframe>
+      <iframe id="card" src="{url(UI / 'request.html')}" style="position:fixed;top:0;left:{(size[0] - 520) // 2}px;width:520px;height:210px;border:0;background:transparent" allowtransparency></iframe>
+    </body></html>""", encoding="utf-8")
+    page.goto(url(scene_file))
+    frames = {f.url.rsplit("/", 1)[-1]: f for f in page.frames}
+    glow, card = frames["glow.html"], frames["request.html"]
+    glow.wait_for_function("!!window.__L.glow")
+    card.wait_for_function("!!window.__L.request")
+    glow.evaluate("window.__L.glow({ payload: true })")
+    card.evaluate("""window.__L.request({ payload: { id: 'a', client: 'Claude', hotkey: 'F6', sound: false,
+      reason: 'Mark the buttons you mean', expiresAt: Date.now() + 9 * 60000 + 41000 } })""")
+    page.wait_for_timeout(1200)
+    page.screenshot(path=str(OUT / "request.png"))
     page.close()
 
 
@@ -288,6 +342,7 @@ def main():
         hero_and_demo(browser)
         tools(browser)
         static_pages(browser)
+        request_card(browser)
         browser.close()
     for f in sorted(OUT.iterdir()):
         print(f"{f.name:16} {f.stat().st_size // 1024:6} KB")

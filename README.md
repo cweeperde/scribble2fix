@@ -168,6 +168,10 @@ Start a new session after connecting. Then:
 - **The AI can ask for a scribble.** It asks in the chat first. If you agree, a card with its question drops in at the top of your screen, with a soft chime and a glowing frame (Scribble2Fix starts by itself if it isn't running). Click **Draw now** or press your hotkey, draw, press **Enter**, and the AI continues. **Not now** tells the AI you declined. The chime can be turned off in Settings.
 - **Several at once**: make a few scribbles in a row and say *"apply my last 3 scribbles"*.
 
+<div align="center">
+<img src="docs/images/request.png" alt="When the AI asks for a scribble: a card with its question at the top of the screen and a frame in the three mark colors" width="800">
+</div>
+
 **Connect by hand**: if the automatic setup can't find your tool, or you use another MCP client, follow [docs/manual-setup.md](docs/manual-setup.md). It has the settings for any MCP client and step-by-step setups for Claude, Codex, Copilot, Cursor, Gemini, Antigravity, OpenCode, Lumo and more.
 
 ## Install
@@ -231,7 +235,7 @@ A short welcome explains the basics, lets you pick your hotkey and connects the 
 </td>
 <td width="38%" align="center" valign="middle">
 
-<img src="docs/images/onboarding.png" alt="The welcome screen" width="290">
+<img src="docs/images/onboarding.png" alt="Connecting the AI tools in the welcome screen" width="290">
 
 </td>
 </tr>
