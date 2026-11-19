@@ -4,11 +4,16 @@ window.__TAURI__ = {
   core: {
     invoke: async (cmd) => cmd === 'get_settings' ? {
       hotkey: 'F6', autostart: true, keepCaptures: 10, maxKeepCaptures: 100,
-      neverSave: false, autoUpdate: true, version: '1.0.0',
+      neverSave: false, autoUpdate: true, version: '1.0.0', requestSound: true, captureMonitor: '',
+      monitors: [{ id: 'DISPLAY1', label: 'Display 1 · 2560 × 1440 (main)' }, { id: 'DISPLAY2', label: 'Display 2 · 1920 × 1080' }],
       tools: [
-        { id: 'claude', name: 'Claude Code', installed: true, connected: true },
-        { id: 'claude-desktop', name: 'Claude Desktop', installed: true, connected: true },
-        { id: 'codex', name: 'Codex', installed: true, connected: false },
+        { id: 'claude', name: 'Claude', installed: true, connected: true, found: 'Claude Code and Claude Desktop', setup: '/scribble command and MCP server' },
+        { id: 'codex', name: 'Codex', installed: true, connected: false, found: 'Codex', setup: '/scribble command and MCP server' },
+        { id: 'copilot', name: 'GitHub Copilot', installed: true, connected: false, found: 'GitHub Copilot', setup: 'scribble skill and MCP server' },
+        { id: 'cursor', name: 'Cursor', installed: true, connected: false, found: 'Cursor', setup: '/scribble skill and MCP server' },
+        { id: 'gemini', name: 'Gemini & Antigravity', installed: true, connected: false, found: 'Gemini CLI and Antigravity', setup: '/scribble command and MCP server' },
+        { id: 'opencode', name: 'OpenCode', installed: true, connected: false, found: 'OpenCode', setup: '/scribble command and MCP server' },
+        { id: 'lumo', name: 'Lumo', installed: false, connected: false, found: '', setup: 'MCP server' },
       ],
     } : null,
   },

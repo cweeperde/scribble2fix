@@ -1,6 +1,6 @@
 [package]
 name = "scribble2fix"
-version = "1.0.0"
+version = "1.1.0"
 edition = "2021"
 description = "Mark up your screen and hand it to an AI coding tool"
 license-file = "../LICENSE"
@@ -26,6 +26,7 @@ serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 dirs = "6"
+jsonc-parser = { version = "0.34", features = ["cst", "serde"] }
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.61", features = ["Win32_UI_WindowsAndMessaging", "Win32_UI_Shell"] }
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Graphics_Gdi", "Win32_UI_WindowsAndMessaging", "Win32_UI_Shell"] }

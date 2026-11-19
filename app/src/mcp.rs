@@ -29,7 +29,13 @@ const WAIT_PER_CALL: Duration = Duration::from_secs(50);
 /// Friendly name of the connected AI tool, from `initialize`.
 static CLIENT: Mutex<String> = Mutex::new(String::new());
 
-pub fn run() {
+/// `client`: the AI tool's name, from `scribble2fix mcp --client <name>` as
+/// written by the automatic setup. Without it, the name is guessed from what
+/// the tool reports in `initialize`.
+pub fn run(client: Option<String>) {
+    if let Some(name) = client.filter(|n| !n.trim().is_empty()) {
+        *CLIENT.lock().unwrap() = name;
+    }
     let mut out = io::stdout().lock();
     for line in io::stdin().lock().lines() {
         let Ok(line) = line else { break };
@@ -54,7 +60,11 @@ fn handle(msg: &Value) -> Option<Value> {
     let params = &msg["params"];
     Some(match msg["method"].as_str().unwrap_or("") {
         "initialize" => {
-            *CLIENT.lock().unwrap() = client_name(params["clientInfo"]["name"].as_str().unwrap_or(""));
+            let mut client = CLIENT.lock().unwrap();
+            if client.is_empty() {
+                *client = client_name(params["clientInfo"]["name"].as_str().unwrap_or(""));
+            }
+            drop(client);
             ok(
                 id,
                 json!({
@@ -89,16 +99,27 @@ fn handle(msg: &Value) -> Option<Value> {
     })
 }
 
+/// A friendly name for what the tool reports as its `clientInfo.name`. Tools
+/// don't always send their own name (the Claude desktop app sends e.g.
+/// "local-agent-mode-scribble2fix"), so unknown names become a neutral one.
 fn client_name(raw: &str) -> String {
     let lower = raw.to_lowercase();
-    if lower.contains("claude") {
-        "Claude".into()
-    } else if lower.contains("codex") {
-        "Codex".into()
-    } else if raw.is_empty() {
-        "Your AI tool".into()
-    } else {
-        raw.into()
+    let known = [
+        ("claude", "Claude"),
+        ("local-agent-mode", "Claude"),
+        ("codex", "Codex"),
+        ("opencode", "OpenCode"),
+        ("lumo", "Lumo"),
+        ("copilot", "Copilot"),
+        ("visual studio code", "Copilot"),
+        ("vscode", "Copilot"),
+        ("cursor", "Cursor"),
+        ("gemini", "Gemini"),
+    ];
+    match known.iter().find(|(key, _)| lower.contains(key)) {
+        Some((_, name)) => (*name).into(),
+        None if raw.is_empty() || lower.contains("scribble2fix") => "Your AI".into(),
+        None => raw.into(),
     }
 }
 
@@ -142,7 +163,8 @@ fn tool_definitions() -> Value {
                 first whether they want to scribble now, and only call this tool after they agreed. \
                 The user then gets a notice and starts the capture with their hotkey when ready. \
                 If they are still drawing when this returns, call `wait_for_scribble` with the \
-                returned request_id.",
+                returned request_id. The result is a screenshot: if you can't view images, don't \
+                request one; tell the user and ask them to describe it in words instead.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -359,6 +381,9 @@ fn capture_result(dir: &Path) -> Value {
         text += &format!(" ({at})");
     }
     text += ".\n";
+    if let Some(reason) = meta["request"]["reason"].as_str() {
+        text += &format!("It answers your request: \"{reason}\"\n");
+    }
     let app = meta["app_name"].as_str().unwrap_or("");
     let title = meta["window_title"].as_str().unwrap_or("");
     if !app.is_empty() || !title.is_empty() {
@@ -375,7 +400,11 @@ area without the drawings, so you can see what is underneath the marks. The user
 to numbered markers (circles with 1, 2, 3...) and typed text labels.\n\
 \n\
 Find the code that renders this UI and make the requested changes. If any mark is ambiguous, ask \
-the user a clarifying question instead of guessing.\n";
+the user a clarifying question instead of guessing.\n\
+\n\
+If you can't view images (your model has no image support), tell the user right away that you can't \
+look at the scribble itself. Work only from the text here (the marks and labels below) and ask them \
+to describe what they marked.\n";
     if let Some(marks) = meta["marks"].as_array().filter(|m| !m.is_empty()) {
         text += "\nThe marks as data (pixels in image 1, origin top left):\n";
         for m in marks {

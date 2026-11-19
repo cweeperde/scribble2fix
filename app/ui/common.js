@@ -46,7 +46,18 @@ function hotkeyRecorder(button, status, initial, onSaved = () => {}) {
 }
 
 function toolStatusText(t) {
+  if (t.connected) return 'Connected: ' + t.setup;
   if (!t.installed) return 'Not found on this computer';
-  if (!t.connected) return 'Not connected';
-  return t.id === 'claude-desktop' ? 'Connected: MCP server' : 'Connected: /scribble command and MCP server';
+  return 'Found: ' + t.found;
+}
+
+// One row of the AI tools list: icon, name, status line, switch.
+function toolRow(t, status) {
+  const row = document.createElement('div');
+  row.className = 'row tool';
+  row.innerHTML = '<div class="label"><span class="name"></span><small></small></div><label class="switch"><input type="checkbox"><span></span></label>';
+  row.prepend(toolIcon(t.id));
+  row.querySelector('.name').textContent = t.name;
+  row.querySelector('small').textContent = status;
+  return row;
 }

@@ -2607,6 +2607,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "jsonc-parser"
+version = "0.34.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0ecded084f9b9a718d39668a42657c32253663d1f6afb3fbb9134f0305f73f48"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "jsonptr"
 version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4321,7 +4330,7 @@ checksum = "94143f37725109f92c262ed2cf5e59bce7498c01bcc1502d7b9afe439a4e9f49"
 
 [[package]]
 name = "scribble2fix"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "active-win-pos-rs",
  "arboard",
@@ -4329,6 +4338,7 @@ dependencies = [
  "chrono",
  "dirs 6.0.0",
  "image",
+ "jsonc-parser",
  "serde",
  "serde_json",
  "tauri",

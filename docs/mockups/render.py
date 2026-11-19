@@ -115,8 +115,9 @@ def open_overlay(browser, bg_png, size):
     return page
 
 
-def start_capture(page, size):
-    page.evaluate(f"window.__capture({{ payload: {{ width: {size[0]}, height: {size[1]}, simple: false, request: null }} }})")
+def start_capture(page, size, cursor=None):
+    cx, cy = cursor or (size[0] / 2, size[1] / 2)
+    page.evaluate(f"window.__capture({{ payload: {{ width: {size[0]}, height: {size[1]}, simple: false, request: null, cursor: [{cx}, {cy}] }} }})")
 
 
 def show(page, el, on=True):
@@ -183,8 +184,8 @@ def hero_and_demo(browser):
     rec.hold(450)
     show(page, "mock-key", False)
     show(page, "mock-screen", False)
-    start_capture(page, size)
-    for _ in range(14):  # intro: frame, glow, toolbar glide-in
+    start_capture(page, size, (export["cx"] + 40, export["cy"] - 60))
+    for _ in range(18):  # intro: shutter, color ring from the mouse, frame, toolbar
         rec.snap()
     page.wait_for_timeout(300)
     show(page, "mock-cursor")
@@ -214,9 +215,9 @@ def hero_and_demo(browser):
     hero = page.screenshot()
     rec.hold(1100)
 
-    # Confirm: outro, then the toast.
+    # Confirm: the area lifts off and flies to the toast.
     page.keyboard.press("Enter")
-    for _ in range(6):
+    for _ in range(14):
         rec.snap()
     page.wait_for_function("!!window.__export")
     show(page, "mock-screen")
@@ -245,7 +246,7 @@ def tools(browser):
     page = open_overlay(browser, bg, size)
     start_capture(page, size)
     page.wait_for_timeout(1500)
-    page.add_style_tag(content="#toolbar-pos, #hint, #frame, #glow, #shine { display: none !important; }")
+    page.add_style_tag(content="#toolbar-pos, #hint, #frame, #glow, #bloom, #spark, #flash, #vignette { display: none !important; }")
 
     keys(page, None, "2", "p")
     drag(page, ellipse(delete["cx"], delete["cy"], delete["w"] / 2 + 16, delete["h"] / 2 + 14))
@@ -272,9 +273,9 @@ def static_pages(browser):
     page.close()
 
     # The real onboarding window, dark mode, with the stubbed Tauri API.
-    page = browser.new_page(viewport={"width": 520, "height": 660}, color_scheme="dark")
+    page = browser.new_page(viewport={"width": 520, "height": 700}, color_scheme="dark")
     page.add_init_script(path=str(HERE / "tauri-stub.js"))
-    page.goto(url(UI / "onboarding.html") + "?w=520&h=660")
+    page.goto(url(UI / "onboarding.html") + "?w=520&h=700")
     page.wait_for_timeout(400)
     page.screenshot(path=str(OUT / "onboarding.png"))
     page.close()

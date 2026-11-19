@@ -23,6 +23,10 @@
   <p class="muted">Click the box, then press the key or key combination you want to use.</p>
   <button class="hotkey" id="hotkey"></button>
   <div class="status" id="hotkey-status"></div>
+  <div class="row" id="monitor-row">
+    <div class="label">Monitor<small>Which screen freezes when you press the hotkey.</small></div>
+    <select id="monitor"></select>
+  </div>
   <div class="row">
     <div class="label">Start at login</div>
     <label class="switch"><input type="checkbox" id="autostart"><span></span></label>
@@ -39,9 +43,14 @@
 
 <section>
   <h2>AI tools</h2>
-  <p class="muted">Connecting adds the <code>scribble2fix</code> MCP server and a <code>/scribble</code> command, so the AI can read your captures and ask you for a scribble (it always asks first).</p>
+  <p class="muted">Connecting sets up everything the tool needs: the <code>scribble2fix</code> MCP server, a <code>/scribble</code> command where the tool has commands, and permission to use it without asking each time. The AI can then read your captures and ask you for a scribble (it always asks in the chat first).</p>
   <div id="tools"></div>
   <div class="status" id="tools-status"></div>
+  <div class="links"><a data-link="manual">Using another AI tool? Connect it by hand</a></div>
+  <div class="row">
+    <div class="label">Sound when an AI asks for a scribble<small>A short chime with the request card at the top of the screen.</small></div>
+    <label class="switch"><input type="checkbox" id="request-sound"><span></span></label>
+  </div>
 </section>
 
 <section>
@@ -88,12 +97,15 @@
       <li><span>active-win-pos-rs</span><span>MIT / Apache-2.0</span></li>
       <li><span>image, base64, chrono, dirs</span><span>MIT / Apache-2.0</span></li>
       <li><span>serde, serde_json</span><span>MIT / Apache-2.0</span></li>
+      <li><span>jsonc-parser</span><span>MIT</span></li>
+      <li><span>App icons: Simple Icons (logos are trademarks of their owners)</span><span>CC0</span></li>
       <li><span>windows-sys</span><span>MIT / Apache-2.0</span></li>
     </ul>
   </details>
 </section>
 
 <script src="guard.js"></script>
+<script src="tool-icons.js"></script>
 <script src="common.js"></script>
 <script>
 const $ = (id) => document.getElementById(id);
@@ -111,18 +123,27 @@ async function load() {
   $('simple').checked = s.simpleToolbar;
   $('fullscreen').checked = s.pauseInFullscreen;
   $('auto-update').checked = s.autoUpdate;
+  $('request-sound').checked = s.requestSound;
+  renderMonitors(s.monitors, s.captureMonitor);
   renderTools(s.tools);
+}
+
+// "" = under the mouse, "primary", or a monitor's name. A chosen monitor
+// that isn't connected right now stays selectable so the choice isn't lost.
+function renderMonitors(monitors, current) {
+  const select = $('monitor');
+  const options = [['', 'Under the mouse'], ['primary', 'Main monitor'], ...monitors.map((m) => [m.id, m.label])];
+  if (current && !options.some(([id]) => id === current)) options.push([current, 'Not connected (uses the mouse)']);
+  select.textContent = '';
+  for (const [id, label] of options) select.append(new Option(label, id, false, id === current));
+  $('monitor-row').hidden = monitors.length < 2 && !current;
 }
 
 function renderTools(tools) {
   const box = $('tools');
   box.textContent = '';
   for (const t of tools) {
-    const row = document.createElement('div');
-    row.className = 'row';
-    row.innerHTML = '<div class="label"><span></span><small></small></div><label class="switch"><input type="checkbox"><span></span></label>';
-    row.querySelector('.label span').textContent = t.name;
-    row.querySelector('small').textContent = toolStatusText(t);
+    const row = toolRow(t, toolStatusText(t));
     const input = row.querySelector('input');
     input.checked = t.connected;
     input.disabled = !t.installed && !t.connected;
@@ -156,6 +177,8 @@ $('copy-path').onchange = (e) => invoke('set_copy_path', { on: e.target.checked 
 $('simple').onchange = (e) => invoke('set_simple_toolbar', { on: e.target.checked });
 $('fullscreen').onchange = (e) => invoke('set_pause_in_fullscreen', { on: e.target.checked });
 $('auto-update').onchange = (e) => invoke('set_auto_update', { on: e.target.checked });
+$('request-sound').onchange = (e) => invoke('set_request_sound', { on: e.target.checked });
+$('monitor').onchange = (e) => invoke('set_capture_monitor', { id: e.target.value });
 $('open-captures').onclick = () => invoke('open_captures');
 $('welcome').onclick = () => invoke('show_onboarding');
 for (const a of document.querySelectorAll('[data-link]')) a.onclick = () => invoke('open_link', { which: a.dataset.link });

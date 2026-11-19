@@ -10,21 +10,42 @@
     font: 14px/1.2 system-ui, -apple-system, "Segoe UI", sans-serif;
     user-select: none; -webkit-user-select: none; cursor: default;
   }
+  /* Springs in (and "catches" the captured area flying down into it with a
+     little bounce and a ring), then lifts away like the request card. */
   #toast {
-    display: flex; align-items: center; gap: 10px; max-width: calc(100% - 24px);
+    position: relative; display: flex; align-items: center; gap: 10px; max-width: calc(100% - 24px);
     padding: 11px 18px 11px 14px; border-radius: 999px; color: #fff;
-    background: rgba(30, 30, 34, 0.9); border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(30, 30, 34, 0.92); border: 1px solid rgba(255, 255, 255, 0.12);
     box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
-    opacity: 0; transform: translateY(12px) scale(0.96); transition: opacity 0.22s, transform 0.4s cubic-bezier(0.2, 1.25, 0.35, 1);
+    opacity: 0;
   }
-  #toast.show { opacity: 1; transform: none; }
+  #toast.show { animation: pop-in 0.55s cubic-bezier(0.2, 1.4, 0.35, 1) forwards; }
+  #toast.hide { animation: lift-out 0.22s cubic-bezier(0.2, 0.8, 0.2, 1) forwards; }
+  @keyframes pop-in {
+    0% { opacity: 0; transform: translateY(14px) scale(0.7); }
+    35% { opacity: 1; }
+    100% { opacity: 1; transform: none; }
+  }
+  @keyframes lift-out { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateY(-10px) scale(0.96); } }
+  /* The ring that goes out from the pill as it catches the capture. */
+  #toast::after {
+    content: ""; position: absolute; inset: -1px; border-radius: inherit; pointer-events: none;
+    border: 2px solid rgba(10, 132, 255, 0.7); opacity: 0;
+  }
+  #toast.show::after { animation: catch 0.6s cubic-bezier(0.2, 0.8, 0.2, 1) 0.08s; }
+  @keyframes catch { from { opacity: 0.9; transform: scale(1); } to { opacity: 0; transform: scale(1.12, 1.35); } }
   #icon {
     flex: none; width: 20px; height: 20px; border-radius: 50%;
     background: conic-gradient(#34c759 0 33%, #ff3b30 0 66%, #0a84ff 0);
     -webkit-mask: radial-gradient(circle, transparent 5px, #000 5.5px);
     mask: radial-gradient(circle, transparent 5px, #000 5.5px);
   }
+  #toast.show #icon { animation: spin-in 0.7s cubic-bezier(0.2, 0.8, 0.2, 1); }
+  @keyframes spin-in { from { transform: rotate(-200deg) scale(0.5); } to { transform: none; } }
   #text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 1ms !important; }
+  }
 </style>
 </head>
 <body>
@@ -35,12 +56,12 @@ const toast = document.getElementById('toast');
 let timer;
 window.__TAURI__.event.listen('toast', ({ payload }) => {
   clearTimeout(timer);
-  toast.classList.remove('show');
+  toast.classList.remove('show', 'hide');
   if (!payload.ms) return;
   document.getElementById('text').textContent = payload.text;
-  void toast.offsetWidth; // restart the transition
+  void toast.offsetWidth; // restart the animation
   toast.classList.add('show');
-  timer = setTimeout(() => toast.classList.remove('show'), payload.ms);
+  timer = setTimeout(() => toast.classList.replace('show', 'hide'), payload.ms);
 });
 </script>
 </body>

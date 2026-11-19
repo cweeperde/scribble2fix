@@ -44,7 +44,12 @@ pub struct Config {
     pub pause_in_fullscreen: bool,
     /// The first-run onboarding was completed.
     pub onboarded: bool,
-    /// AI tools the user chose to connect (`claude`, `claude-desktop`, `codex`).
+    /// Play a short sound when an AI tool asks for a scribble.
+    pub request_sound: bool,
+    /// Which monitor to capture: "" = the one under the mouse, "primary", or
+    /// a monitor's name (falls back to the mouse when it isn't connected).
+    pub capture_monitor: String,
+    /// AI tools the user chose to connect (ids from `integrations::TOOLS`).
     pub tools: Vec<String>,
 }
 
@@ -59,16 +64,24 @@ impl Default for Config {
             auto_update: true,
             pause_in_fullscreen: false,
             onboarded: false,
+            request_sound: true,
+            capture_monitor: String::new(),
             tools: vec![],
         }
     }
 }
 
 pub fn load_config() -> Config {
-    fs::read_to_string(data_dir().join("config.json"))
+    let mut config: Config = fs::read_to_string(data_dir().join("config.json"))
         .ok()
         .and_then(|s| serde_json::from_str(&s).ok())
-        .unwrap_or_default()
+        .unwrap_or_default();
+    // Version 1.0 had Claude Desktop as its own tool; it's part of "claude" now.
+    if config.tools.iter().any(|t| t == "claude-desktop") {
+        config.tools.retain(|t| t != "claude-desktop" && t != "claude");
+        config.tools.push("claude".into());
+    }
+    config
 }
 
 pub fn save_config(config: &Config) -> io::Result<()> {
@@ -87,15 +100,46 @@ pub struct Crop {
     pub height: u32,
 }
 
+/// The monitor a capture was taken on (physical pixels).
+#[derive(Serialize, Clone, Default)]
+pub struct MonitorInfo {
+    pub name: String,
+    pub x: i32,
+    pub y: i32,
+    pub width: u32,
+    pub height: u32,
+    /// Display scaling, e.g. 1.5 for 150 %.
+    pub scale: f64,
+}
+
+/// The AI request this capture answered.
+#[derive(Serialize)]
+pub struct MetaRequest {
+    pub client: String,
+    pub reason: String,
+}
+
+/// `meta.json` next to the two images of a capture.
 #[derive(Serialize)]
 pub struct Meta {
+    pub app_version: &'static str,
+    /// "windows", "macos" or "linux".
+    pub os: &'static str,
     /// Local time, RFC 3339.
     pub captured_at: String,
     pub captured_at_unix_ms: i64,
+    /// From freezing the screen to confirming.
+    pub drawing_seconds: f64,
     pub app_name: String,
     pub window_title: String,
+    pub monitor: MonitorInfo,
     /// Crop rectangle in physical pixels of the captured monitor.
     pub crop: Crop,
+    /// Exported image pixels per screen pixel (below 1 when a large area was
+    /// scaled down). Image pixel = (screen pixel - crop origin) * image_scale.
+    pub image_scale: f64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub request: Option<MetaRequest>,
     /// The marks as data, in pixels of the exported image (see overlay.html).
     pub marks: serde_json::Value,
 }

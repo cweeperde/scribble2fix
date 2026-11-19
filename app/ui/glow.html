@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Scribble2Fix</title>
+<link rel="stylesheet" href="frame.css">
+<style>
+  /* While an AI tool waits for a scribble: the same frame as while drawing
+     (frame.css), with its colors slowly going round. Click-through. */
+  html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; }
+  #frame { position: fixed; inset: 0; opacity: 0; transition: opacity 0.6s; }
+  body.on #frame { opacity: 1; }
+</style>
+</head>
+<body>
+<div id="frame" class="turning">
+  <div class="frame-glow"><div class="frame-edge"></div></div>
+  <div class="frame-edge"></div>
+</div>
+<script src="guard.js"></script>
+<script>
+window.__TAURI__.event.listen('glow', ({ payload }) => {
+  document.body.classList.toggle('on', payload === true);
+});
+</script>
+</body>
+</html>

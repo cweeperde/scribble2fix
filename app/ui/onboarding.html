@@ -24,7 +24,8 @@
   ol li { margin: 4px 0; }
   .keys { display: grid; grid-template-columns: max-content 1fr max-content 1fr; gap: 7px 12px; align-items: center; margin: 2px 0 12px; font-size: 13px; }
   .keys > :nth-child(odd) { white-space: nowrap; }
-  .recommended { font-size: 11px; font-weight: 600; color: var(--add); margin-left: 6px; }
+  .row.all { padding: 10px 12px; margin-bottom: 4px; border-radius: 10px; background: var(--field); }
+  .row.all + .row { border-top: 0; }
   footer { display: flex; align-items: center; gap: 10px; padding-top: 14px; }
   .dots { flex: 1; display: flex; gap: 6px; }
   .dots i { width: 7px; height: 7px; border-radius: 4px; background: var(--field); border: 1px solid var(--line); transition: width 0.3s cubic-bezier(0.2, 1.25, 0.35, 1), background-color 0.2s; }
@@ -40,7 +41,7 @@
   <ol>
     <li>Press your hotkey. The screen freezes and you can draw on it.</li>
     <li>Mark what you want: circle, scribble, draw boxes or arrows.</li>
-    <li>Press <kbd>Enter</kbd>. The annotated screenshot is copied, ready to paste into Claude, Codex or any chat.</li>
+    <li>Press <kbd>Enter</kbd>. The annotated screenshot is copied, ready to paste into Claude, Codex, OpenCode, Lumo or any chat.</li>
   </ol>
   <h2>Every color has a meaning</h2>
   <div class="colors">
@@ -94,6 +95,7 @@
 </footer>
 
 <script src="guard.js"></script>
+<script src="tool-icons.js"></script>
 <script src="common.js"></script>
 <script>
 const $ = (id) => document.getElementById(id);
@@ -113,25 +115,32 @@ function show(n) {
 function renderTools() {
   const box = $('tools');
   box.textContent = '';
-  for (const t of tools) {
+  // "Connect all" once there's a choice to make; it only covers found tools.
+  const found = tools.filter((t) => t.installed);
+  let all = null;
+  if (found.length > 1) {
     const row = document.createElement('div');
-    row.className = 'row';
-    row.innerHTML = '<div class="label"><span></span><small></small></div><label class="switch"><input type="checkbox"><span></span></label>';
-    row.querySelector('.label span').textContent = t.name;
-    if (t.installed) {
-      const tag = document.createElement('span');
-      tag.className = 'recommended';
-      tag.textContent = 'Recommended';
-      row.querySelector('.label span').after(tag);
-    }
-    row.querySelector('small').textContent = t.installed ? 'Found on this computer' : 'Not found. You can connect it later in Settings.';
+    row.className = 'row all';
+    row.innerHTML = '<div class="label"><b>Connect all found tools</b></div><label class="switch"><input type="checkbox"><span></span></label>';
+    all = row.querySelector('input');
+    all.onchange = () => {
+      for (const t of found) t.want = all.checked;
+      box.querySelectorAll('input[data-id]').forEach((i) => { if (!i.disabled) i.checked = all.checked; });
+    };
+    box.append(row);
+  }
+  const syncAll = () => { if (all) all.checked = found.every((t) => t.want); };
+  for (const t of tools) {
+    const row = toolRow(t, t.installed ? 'Found: ' + t.found : 'Not found. You can connect it later in Settings.');
     const input = row.querySelector('input');
     input.checked = t.installed;
     input.disabled = !t.installed;
-    input.onchange = () => { t.want = input.checked; };
+    input.dataset.id = t.id;
+    input.onchange = () => { t.want = input.checked; syncAll(); };
     t.want = input.checked;
     box.append(row);
   }
+  syncAll();
 }
 
 async function finish() {

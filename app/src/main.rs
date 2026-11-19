@@ -46,6 +46,7 @@ struct Source {
     unix_ms: i64,
     app_name: String,
     window_title: String,
+    monitor: storage::MonitorInfo,
 }
 
 #[derive(Default)]
@@ -61,6 +62,9 @@ struct AppState {
     /// disappears when its owner is dropped.
     clipboard: Mutex<Option<arboard::Clipboard>>,
     toast_generation: AtomicU64,
+    /// Bumped whenever the request card is shown or hidden, so a stale
+    /// watcher thread knows to stop.
+    request_generation: AtomicU64,
     /// The hotkey is released because a fullscreen app is in front.
     hotkey_paused: AtomicBool,
 }
@@ -135,7 +139,7 @@ fn start_capture(app: &AppHandle) {
         return;
     }
     if storage::read_request().is_some() {
-        hide_toast(app);
+        hide_request(app);
     }
     let app = app.clone();
     thread::spawn(move || {
@@ -148,8 +152,32 @@ fn start_capture(app: &AppHandle) {
     });
 }
 
-/// Freeze the monitor under the cursor and hand it to the (hidden, pre-warmed)
-/// overlay. The overlay shows itself once the screenshot is painted.
+/// The monitor under the mouse.
+fn cursor_monitor(app: &AppHandle) -> Option<tauri::Monitor> {
+    let cursor = app.cursor_position().ok()?;
+    app.monitor_from_point(cursor.x, cursor.y).ok().flatten()
+}
+
+/// The monitor to capture on (Settings → Monitor). Falls back to the one
+/// under the mouse when the chosen monitor isn't connected.
+fn target_monitor(app: &AppHandle) -> Option<tauri::Monitor> {
+    let chosen = match config(app).capture_monitor.as_str() {
+        "" => None,
+        "primary" => app.primary_monitor().ok().flatten(),
+        name => app
+            .available_monitors()
+            .unwrap_or_default()
+            .into_iter()
+            .find(|m| m.name().is_some_and(|n| n == name)),
+    };
+    chosen
+        .or_else(|| cursor_monitor(app))
+        .or_else(|| app.primary_monitor().ok().flatten())
+}
+
+/// Freeze the chosen monitor (by default the one under the cursor) and hand
+/// it to the (hidden, pre-warmed) overlay. The overlay shows itself once the
+/// screenshot is painted.
 fn capture(app: &AppHandle) -> Result<(), String> {
     let state = app.state::<AppState>();
     let unix_ms = chrono::Utc::now().timestamp_millis();
@@ -157,13 +185,7 @@ fn capture(app: &AppHandle) -> Result<(), String> {
         .map(|w| (w.app_name, w.title))
         .unwrap_or_default();
 
-    let cursor = app.cursor_position().map_err(err)?;
-    let monitor = app
-        .monitor_from_point(cursor.x, cursor.y)
-        .ok()
-        .flatten()
-        .or_else(|| app.primary_monitor().ok().flatten())
-        .ok_or("no monitor found")?;
+    let monitor = target_monitor(app).ok_or("no monitor found")?;
     let area = Area {
         x: monitor.position().x,
         y: monitor.position().y,
@@ -171,8 +193,13 @@ fn capture(app: &AppHandle) -> Result<(), String> {
         height: monitor.size().height,
         scale: monitor.scale_factor(),
     };
+    // A point on that monitor, for the fallback lookup in `find_screen`.
+    let (px, py) = (
+        area.x as f64 + area.width as f64 / 2.0,
+        area.y as f64 + area.height as f64 / 2.0,
+    );
 
-    let shot = find_screen(&area, cursor.x, cursor.y)?
+    let shot = find_screen(&area, px, py)?
         .capture_image()
         .map_err(err)?;
     let (width, height) = (shot.width(), shot.height());
@@ -183,6 +210,14 @@ fn capture(app: &AppHandle) -> Result<(), String> {
         unix_ms,
         app_name,
         window_title,
+        monitor: storage::MonitorInfo {
+            name: monitor.name().cloned().unwrap_or_default(),
+            x: area.x,
+            y: area.y,
+            width: area.width,
+            height: area.height,
+            scale: area.scale,
+        },
     };
 
     let overlay = app.get_webview_window("overlay").ok_or("overlay missing")?;
@@ -198,12 +233,24 @@ fn capture(app: &AppHandle) -> Result<(), String> {
     struct Payload {
         width: u32,
         height: u32,
-        /// Shown in the hint while an AI tool waits for this scribble.
-        request: Option<String>,
+        /// Shown at the top while an AI tool waits for this scribble.
+        request: Option<RequestInfo>,
         /// Only the basic tools in the toolbar.
         simple: bool,
+        /// Mouse position on the captured monitor (physical px), where the
+        /// intro animation starts; the center if the mouse is elsewhere.
+        cursor: (f64, f64),
     }
-    let request = storage::read_request().map(|r| format!("{}: {}", r.client, r.reason));
+    let cursor = app
+        .cursor_position()
+        .ok()
+        .map(|c| (c.x - area.x as f64, c.y - area.y as f64))
+        .filter(|&(x, y)| x >= 0.0 && y >= 0.0 && x < width as f64 && y < height as f64)
+        .unwrap_or((width as f64 / 2.0, height as f64 / 2.0));
+    let request = storage::read_request().map(|r| RequestInfo {
+        client: r.client,
+        reason: r.reason,
+    });
     overlay
         .emit(
             "capture",
@@ -212,9 +259,16 @@ fn capture(app: &AppHandle) -> Result<(), String> {
                 height,
                 request,
                 simple: config(app).simple_toolbar,
+                cursor,
             },
         )
         .map_err(err)
+}
+
+#[derive(Serialize, Clone)]
+struct RequestInfo {
+    client: String,
+    reason: String,
 }
 
 /// Find the xcap screen matching a Tauri monitor. Platforms disagree on
@@ -251,8 +305,53 @@ fn show_overlay(window: WebviewWindow) -> Result<(), String> {
 
 #[tauri::command]
 fn hide_overlay(window: WebviewWindow) -> Result<(), String> {
-    window.hide().map_err(err)
+    hide_overlay_window(&window)
 }
+
+/// The overlay covers the whole monitor, taskbar included, and stays on top,
+/// so Windows treats it like a fullscreen app. Hiding it that way could leave
+/// taskbar buttons drawn with the wrong colors until hovered (seen with
+/// several monitors at different scaling). Drop "always on top" first, and
+/// have the taskbars repaint once it's gone.
+fn hide_overlay_window(window: &WebviewWindow) -> Result<(), String> {
+    let _ = window.set_always_on_top(false);
+    window.hide().map_err(err)?;
+    refresh_taskbars();
+    Ok(())
+}
+
+#[cfg(windows)]
+fn refresh_taskbars() {
+    thread::spawn(|| {
+        use windows_sys::Win32::Graphics::Gdi::{
+            RedrawWindow, RDW_ALLCHILDREN, RDW_ERASE, RDW_FRAME, RDW_INVALIDATE, RDW_UPDATENOW,
+        };
+        use windows_sys::Win32::UI::WindowsAndMessaging::FindWindowExW;
+        thread::sleep(Duration::from_millis(120));
+        let wide = |s: &str| s.encode_utf16().chain([0]).collect::<Vec<u16>>();
+        for class in ["Shell_TrayWnd", "Shell_SecondaryTrayWnd"] {
+            let class = wide(class);
+            let mut hwnd = std::ptr::null_mut();
+            loop {
+                hwnd = unsafe { FindWindowExW(std::ptr::null_mut(), hwnd, class.as_ptr(), std::ptr::null()) };
+                if hwnd.is_null() {
+                    break;
+                }
+                unsafe {
+                    RedrawWindow(
+                        hwnd,
+                        std::ptr::null(),
+                        std::ptr::null_mut(),
+                        RDW_INVALIDATE | RDW_ERASE | RDW_FRAME | RDW_ALLCHILDREN | RDW_UPDATENOW,
+                    )
+                };
+            }
+        }
+    });
+}
+
+#[cfg(not(windows))]
+fn refresh_taskbars() {}
 
 /// The overlay page (re)loaded. At startup nothing is going on; after an
 /// unexpected reload during a capture the frozen screenshot is gone, so hide
@@ -274,7 +373,7 @@ fn cancel_capture(app: AppHandle, window: WebviewWindow) -> Result<(), String> {
     if let Some(request) = storage::answer_request(None) {
         show_toast(&app, &format!("Cancelled. {} was told", request.client));
     }
-    window.hide().map_err(err)
+    hide_overlay_window(&window)
 }
 
 /// Receives the cropped images (base64 PNG) from the overlay, saves them for
@@ -286,16 +385,17 @@ fn finish_capture(
     annotated: String,
     clean: String,
     crop: Crop,
+    image_scale: f64,
     marks: serde_json::Value,
 ) -> Result<(), String> {
-    window.hide().map_err(err)?;
+    hide_overlay_window(&window)?;
     let state = app.state::<AppState>();
     let source = state.source.lock().unwrap().clone();
     state.active.store(false, Ordering::SeqCst);
 
     let app = app.clone();
     thread::spawn(move || {
-        let message = match deliver(&app, &annotated, &clean, crop, marks, source) {
+        let message = match deliver(&app, &annotated, &clean, crop, image_scale, marks, source) {
             Ok(dir) => match dir.and_then(|d| storage::answer_request(Some(d))) {
                 Some(request) => format!("Sent to {}, also copied", request.client),
                 None if config(&app).copy_path && !config(&app).never_save => {
@@ -321,6 +421,7 @@ fn deliver(
     annotated: &str,
     clean: &str,
     crop: Crop,
+    image_scale: f64,
     marks: serde_json::Value,
     source: Source,
 ) -> Result<Option<std::path::PathBuf>, String> {
@@ -337,11 +438,21 @@ fn deliver(
             .with_timezone(&chrono::Local)
             .to_rfc3339_opts(chrono::SecondsFormat::Secs, false);
         let meta = Meta {
+            app_version: env!("CARGO_PKG_VERSION"),
+            os: std::env::consts::OS,
             captured_at,
             captured_at_unix_ms: source.unix_ms,
+            drawing_seconds: ((chrono::Utc::now().timestamp_millis() - source.unix_ms).max(0) as f64 / 1000.0)
+                .round(),
             app_name: source.app_name,
             window_title: source.window_title,
+            monitor: source.monitor,
             crop,
+            image_scale,
+            request: storage::read_request().map(|r| storage::MetaRequest {
+                client: r.client,
+                reason: r.reason,
+            }),
             marks,
         };
         Some(storage::save_capture(&annotated, &clean, &meta, config.keep_captures).map_err(err)?)
@@ -390,35 +501,6 @@ fn show_toast(app: &AppHandle, text: &str) {
     show_toast_for(app, text, TOAST_MS);
 }
 
-fn hide_toast(app: &AppHandle) {
-    app.state::<AppState>()
-        .toast_generation
-        .fetch_add(1, Ordering::SeqCst);
-    if let Some(toast) = app.get_webview_window("toast") {
-        let _ = toast.emit("toast", serde_json::json!({ "text": "", "ms": 0 }));
-        set_toast_visible(&toast, false);
-    }
-}
-
-/// An AI tool asked for a scribble (`scribble2fix --request`, sent by the MCP
-/// server): keep a notice up until the user starts the capture.
-fn show_request(app: &AppHandle) {
-    if let Some(request) = storage::read_request() {
-        let hotkey = config(app).hotkey;
-        let ms = (storage::REQUEST_TTL_MS
-            - (chrono::Utc::now().timestamp_millis() - request.created_unix_ms))
-            .max(0);
-        show_toast_for(
-            app,
-            &format!(
-                "{} asks: {}. Press {hotkey} when ready",
-                request.client, request.reason
-            ),
-            ms as u64,
-        );
-    }
-}
-
 fn show_toast_for(app: &AppHandle, text: &str, ms: u64) {
     let Some(toast) = app.get_webview_window("toast") else {
         return;
@@ -445,7 +527,7 @@ fn show_toast_for(app: &AppHandle, text: &str, ms: u64) {
         "toast",
         serde_json::json!({ "text": text, "ms": ms.saturating_sub(400) }),
     );
-    set_toast_visible(&toast, true);
+    set_visible_no_activate(&toast, true);
 
     let generation = state.toast_generation.fetch_add(1, Ordering::SeqCst) + 1;
     let app = app.clone();
@@ -457,18 +539,19 @@ fn show_toast_for(app: &AppHandle, text: &str, ms: u64) {
             .load(Ordering::SeqCst)
             == generation
         {
-            set_toast_visible(&toast, false);
+            set_visible_no_activate(&toast, false);
         }
     });
 }
 
-/// The toast must never take keyboard focus (the user is about to paste
-/// somewhere). On Windows, `show()` activates the window whenever the process
-/// is allowed to (e.g. right after launch), so show it without activation.
+/// The toast, request card and glow must never steal keyboard focus when they
+/// appear (the user is typing or about to paste somewhere). On Windows,
+/// `show()` activates the window whenever the process is allowed to (e.g.
+/// right after launch), so show it without activation.
 #[cfg(windows)]
-fn set_toast_visible(toast: &WebviewWindow, visible: bool) {
+fn set_visible_no_activate(window: &WebviewWindow, visible: bool) {
     use windows_sys::Win32::UI::WindowsAndMessaging::{ShowWindow, SW_HIDE, SW_SHOWNOACTIVATE};
-    if let Ok(hwnd) = toast.hwnd() {
+    if let Ok(hwnd) = window.hwnd() {
         unsafe {
             ShowWindow(
                 hwnd.0 as _,
@@ -479,8 +562,119 @@ fn set_toast_visible(toast: &WebviewWindow, visible: bool) {
 }
 
 #[cfg(not(windows))]
-fn set_toast_visible(toast: &WebviewWindow, visible: bool) {
-    let _ = if visible { toast.show() } else { toast.hide() };
+fn set_visible_no_activate(window: &WebviewWindow, visible: bool) {
+    let _ = if visible { window.show() } else { window.hide() };
+}
+
+// ---------------------------------------------------------------- AI requests
+
+/// Request card window size in logical px (the card inside leaves room for
+/// its shadow and entrance animation).
+const REQUEST_SIZE: (f64, f64) = (520.0, 210.0);
+
+/// An AI tool asked for a scribble (`scribble2fix --request`, sent by the MCP
+/// server): a card at the top of the screen and a glowing frame around it
+/// stay up until the user answers, the request expires or it's answered or
+/// cancelled elsewhere.
+fn show_request(app: &AppHandle) {
+    let Some(request) = storage::read_request() else {
+        return;
+    };
+    let (Some(card), Some(glow), Some(monitor)) = (
+        app.get_webview_window("request"),
+        app.get_webview_window("glow"),
+        target_monitor(app),
+    ) else {
+        return;
+    };
+    // The work area leaves out the taskbar / dock / menu bar.
+    let work = *monitor.work_area();
+    let scale = monitor.scale_factor();
+    let (w, h) = (
+        (REQUEST_SIZE.0 * scale) as u32,
+        (REQUEST_SIZE.1 * scale) as u32,
+    );
+    let x = work.position.x + (work.size.width.saturating_sub(w) / 2) as i32;
+    let _ = card.set_position(PhysicalPosition::new(x, work.position.y));
+    let _ = card.set_size(PhysicalSize::new(w, h));
+    let _ = glow.set_position(work.position);
+    let _ = glow.set_size(work.size);
+
+    let config = config(app);
+    let _ = card.emit(
+        "request",
+        serde_json::json!({
+            "id": request.id,
+            "client": request.client,
+            "reason": request.reason,
+            "hotkey": config.hotkey,
+            "expiresAt": request.created_unix_ms + storage::REQUEST_TTL_MS,
+            "sound": config.request_sound,
+        }),
+    );
+    if can_place_windows() {
+        let _ = glow.emit("glow", true);
+        set_visible_no_activate(&glow, true);
+    }
+    set_visible_no_activate(&card, true);
+    let _ = card.set_always_on_top(true);
+
+    // Close the card once the request is gone (answered, expired, or the AI
+    // tool gave up), unless it was shown again or hidden in the meantime.
+    let state = app.state::<AppState>();
+    let generation = state.request_generation.fetch_add(1, Ordering::SeqCst) + 1;
+    let app = app.clone();
+    thread::spawn(move || loop {
+        thread::sleep(Duration::from_millis(500));
+        let state = app.state::<AppState>();
+        if state.request_generation.load(Ordering::SeqCst) != generation {
+            return;
+        }
+        if storage::read_request().is_none_or(|r| r.id != request.id) {
+            hide_request(&app);
+            return;
+        }
+    });
+}
+
+/// On Wayland apps can't place their windows, so a frame meant to hug the
+/// screen edges would end up somewhere in the middle: it's skipped there.
+fn can_place_windows() -> bool {
+    !cfg!(target_os = "linux")
+        || std::env::var_os("WAYLAND_DISPLAY").is_none()
+        || std::env::var("GDK_BACKEND").is_ok_and(|b| b.contains("x11"))
+}
+
+fn hide_request(app: &AppHandle) {
+    app.state::<AppState>()
+        .request_generation
+        .fetch_add(1, Ordering::SeqCst);
+    for label in ["request", "glow"] {
+        if let Some(window) = app.get_webview_window(label) {
+            set_visible_no_activate(&window, false);
+        }
+    }
+    let _ = app.emit("glow", false);
+}
+
+/// "Draw now" on the request card: same as pressing the hotkey. Waits a
+/// moment so the card and glow are gone before the screen is frozen.
+#[tauri::command]
+fn request_draw(app: AppHandle) {
+    hide_request(&app);
+    thread::spawn(move || {
+        thread::sleep(Duration::from_millis(180));
+        start_capture(&app);
+    });
+}
+
+/// "Not now" on the request card: tells the AI tool the user declined.
+#[tauri::command]
+fn request_decline(app: AppHandle) {
+    hide_request(&app);
+    if let Some(request) = storage::answer_request(None) {
+        show_toast(&app, &format!("Declined. {} was told", request.client));
+    }
 }
 
 // ---------------------------------------------------------------- hotkey & settings
@@ -503,8 +697,43 @@ struct Settings {
     simple_toolbar: bool,
     auto_update: bool,
     pause_in_fullscreen: bool,
+    request_sound: bool,
+    capture_monitor: String,
+    monitors: Vec<MonitorChoice>,
     version: &'static str,
     tools: Vec<integrations::ToolStatus>,
+}
+
+#[derive(Serialize)]
+struct MonitorChoice {
+    /// The monitor's name, stored in `capture_monitor`.
+    id: String,
+    label: String,
+}
+
+/// The connected monitors for Settings → Monitor, e.g. "Display 2 · 2560 × 1440 (main)".
+fn monitor_choices(app: &AppHandle) -> Vec<MonitorChoice> {
+    let primary = app
+        .primary_monitor()
+        .ok()
+        .flatten()
+        .and_then(|m| m.name().cloned());
+    app.available_monitors()
+        .unwrap_or_default()
+        .iter()
+        .enumerate()
+        .filter_map(|(i, m)| {
+            let id = m.name()?.clone();
+            let main = if primary.as_ref() == Some(&id) { " (main)" } else { "" };
+            let label = format!(
+                "Display {} · {} × {}{main}",
+                i + 1,
+                m.size().width,
+                m.size().height
+            );
+            Some(MonitorChoice { id, label })
+        })
+        .collect()
 }
 
 #[tauri::command]
@@ -520,6 +749,9 @@ fn get_settings(app: AppHandle) -> Settings {
         simple_toolbar: config.simple_toolbar,
         auto_update: config.auto_update,
         pause_in_fullscreen: config.pause_in_fullscreen,
+        request_sound: config.request_sound,
+        capture_monitor: config.capture_monitor.clone(),
+        monitors: monitor_choices(&app),
         version: env!("CARGO_PKG_VERSION"),
         tools: integrations::status(&config),
     }
@@ -565,6 +797,7 @@ fn set_never_save(app: AppHandle, on: bool) -> Result<(), String> {
     update_config(&app, |c| c.never_save = on)?;
     if on {
         storage::answer_request(None);
+        hide_request(&app);
         let dir = storage::captures_dir();
         if dir.exists() {
             std::fs::remove_dir_all(dir).map_err(err)?;
@@ -588,6 +821,19 @@ fn set_simple_toolbar(app: AppHandle, on: bool) -> Result<(), String> {
 #[tauri::command]
 fn set_pause_in_fullscreen(app: AppHandle, on: bool) -> Result<(), String> {
     update_config(&app, |c| c.pause_in_fullscreen = on)?;
+    Ok(())
+}
+
+#[tauri::command]
+fn set_request_sound(app: AppHandle, on: bool) -> Result<(), String> {
+    update_config(&app, |c| c.request_sound = on)?;
+    Ok(())
+}
+
+/// "" = the monitor under the mouse, "primary", or a monitor's name.
+#[tauri::command]
+fn set_capture_monitor(app: AppHandle, id: String) -> Result<(), String> {
+    update_config(&app, |c| c.capture_monitor = id)?;
     Ok(())
 }
 
@@ -640,6 +886,7 @@ fn open_link(app: AppHandle, which: String) -> Result<(), String> {
         "repo" => REPO_URL.to_string(),
         "license" => format!("{REPO_URL}/blob/main/LICENSE"),
         "issues" => format!("{REPO_URL}/issues"),
+        "manual" => format!("{REPO_URL}/blob/main/docs/manual-setup.md"),
         "author" => "https://github.com/cweeperde".to_string(),
         _ => return Err("unknown link".into()),
     };
@@ -711,7 +958,7 @@ fn open_settings(app: &AppHandle) {
 }
 
 fn open_onboarding(app: &AppHandle) {
-    open_window(app, "onboarding", "Welcome to Scribble2Fix", 520.0, 660.0);
+    open_window(app, "onboarding", "Welcome to Scribble2Fix", 520.0, 700.0);
 }
 
 // ---------------------------------------------------------------- fullscreen apps
@@ -842,6 +1089,39 @@ fn create_windows(app: &AppHandle) -> tauri::Result<()> {
         .focusable(false)
         .build()?;
     toast.set_ignore_cursor_events(true)?;
+
+    // AI request: a clickable card, and a click-through glowing frame around
+    // the work area (it leaves the taskbar out, so Windows doesn't treat it
+    // as a fullscreen window).
+    // Never takes keyboard focus (the user may be typing), but its buttons
+    // take the first click.
+    WebviewWindowBuilder::new(app, "request", WebviewUrl::App("request.html".into()))
+        .title("Scribble2Fix")
+        .inner_size(REQUEST_SIZE.0, REQUEST_SIZE.1)
+        .visible(false)
+        .decorations(false)
+        .transparent(true)
+        .resizable(false)
+        .shadow(false)
+        .skip_taskbar(true)
+        .always_on_top(true)
+        .focused(false)
+        .focusable(false)
+        .accept_first_mouse(true)
+        .build()?;
+    let glow = WebviewWindowBuilder::new(app, "glow", WebviewUrl::App("glow.html".into()))
+        .title("Scribble2Fix")
+        .visible(false)
+        .decorations(false)
+        .transparent(true)
+        .resizable(false)
+        .shadow(false)
+        .skip_taskbar(true)
+        .always_on_top(true)
+        .focused(false)
+        .focusable(false)
+        .build()?;
+    glow.set_ignore_cursor_events(true)?;
     Ok(())
 }
 
@@ -889,9 +1169,14 @@ fn create_tray(app: &AppHandle) -> tauri::Result<()> {
 }
 
 fn main() {
-    // `scribble2fix mcp`: act as the MCP server for Claude Code / Codex (stdio).
+    // `scribble2fix mcp [--client <name>]`: act as the MCP server for an AI tool (stdio).
     if std::env::args().nth(1).as_deref() == Some("mcp") {
-        mcp::run();
+        let args: Vec<String> = std::env::args().collect();
+        let client = args
+            .iter()
+            .position(|a| a == "--client")
+            .and_then(|i| args.get(i + 1).cloned());
+        mcp::run(client);
         return;
     }
     // `scribble2fix launch <args>`: starts the app with <args> and exits right
@@ -954,6 +1239,10 @@ fn main() {
             open_link,
             open_captures,
             update_now,
+            request_draw,
+            request_decline,
+            set_request_sound,
+            set_capture_monitor,
         ])
         .setup(|app| {
             #[cfg(target_os = "macos")]

@@ -65,5 +65,19 @@ input[type=number] {
   color: var(--text); background: var(--field); border: 1px solid var(--line);
 }
 
+/* App icon in the AI tools list. */
+.tool-icon {
+  flex: none; width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12), 0 1px 2px rgba(0, 0, 0, 0.15);
+}
+.tool-icon svg { width: 17px; height: 17px; }
+.row.tool { padding: 8px 0; }
+
+select {
+  height: 30px; width: 190px; padding: 0 8px; border-radius: 8px; font: inherit;
+  color: var(--text); background: var(--field); border: 1px solid var(--line);
+}
+[hidden] { display: none !important; }
+
 .colors { display: grid; grid-template-columns: auto 1fr; gap: 8px 12px; align-items: center; margin: 4px 0 14px; }
 .dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }

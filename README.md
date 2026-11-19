@@ -10,8 +10,8 @@
 [![Downloads](https://img.shields.io/github/downloads/cweeperde/scribble2fix/total?style=flat-square&color=34c759)](https://github.com/cweeperde/scribble2fix/releases)
 [![Stars](https://img.shields.io/github/stars/cweeperde/scribble2fix?style=flat-square&color=f5b301)](https://github.com/cweeperde/scribble2fix/stargazers)
 [![License: PolyForm Strict](https://img.shields.io/badge/license-PolyForm%20Strict-ff3b30?style=flat-square)](#license)
-[![Works with Claude](https://img.shields.io/badge/works%20with-Claude-D97757?style=flat-square&logo=claude&logoColor=white)](#built-for-claude-and-codex)
-[![Works with Codex](https://img.shields.io/badge/works%20with-Codex-412991?style=flat-square&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyLjYiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI%2BPHBhdGggZD0iTTMgNmw2IDYtNiA2TTEyIDE5aDkiLz48L3N2Zz4%3D&logoColor=white)](#built-for-claude-and-codex)
+[![Works with Claude](https://img.shields.io/badge/works%20with-Claude-D97757?style=flat-square&logo=claude&logoColor=white)](#works-with-your-ai-tools)
+[![Works with Codex](https://img.shields.io/badge/works%20with-Codex-412991?style=flat-square&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyLjYiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI%2BPHBhdGggZD0iTTMgNmw2IDYtNiA2TTEyIDE5aDkiLz48L3N2Zz4%3D&logoColor=white)](#works-with-your-ai-tools)
 
 <br>
 
@@ -50,7 +50,7 @@ Green adds, red removes, blue changes or moves. The AI gets the exact positions 
 <td width="50%" valign="top">
 
 **Your AI can ask you**<br>
-When Claude or Codex isn't sure what you mean, it offers to let you show it, and starts Scribble2Fix if needed.
+When your AI isn't sure what you mean, it offers to let you show it. A card drops in at the top of your screen, and Scribble2Fix starts by itself if needed.
 
 </td>
 <td width="50%" valign="top">
@@ -130,7 +130,7 @@ Copied. Paste it anywhere, or type `/scribble` in your AI tool.
 </tr>
 </table>
 
-`Ctrl+Z` undo · `Ctrl+Shift+Z` redo (`Cmd` on macOS) · `Esc` cancel · left-click the tray icon to start without the hotkey. Prefer fewer buttons? Turn on **Simple toolbar** in Settings.
+`Ctrl+Z` undo · `Ctrl+Shift+Z` redo (`Cmd` on macOS) · `Esc` cancel · left-click the tray icon to start without the hotkey. Prefer fewer buttons? Turn on **Simple toolbar** in Settings. Several monitors? Pick the one that freezes under **Settings → Monitor** (default: the one under the mouse).
 
 ### What your AI gets
 
@@ -140,7 +140,7 @@ The image is cropped to your marks and gets a small color legend, so any AI unde
 <img src="docs/images/result.png" alt="The exported image: cropped to the marks, with a color legend" width="700">
 </div>
 
-## Built for Claude and Codex
+## Works with your AI tools
 
 <div align="center">
 <img src="docs/images/chat.png" alt="An AI coding assistant asks for a scribble, gets the marks and edits the page" width="800">
@@ -148,93 +148,27 @@ The image is cropped to your marks and gets a small color legend, so any AI unde
 
 <br>
 
-Scribble2Fix connects with one click, in the welcome screen or later in **Settings → AI tools**:
+Scribble2Fix connects with one click, in the welcome screen or later in **Settings → AI tools**. It sets up everything the tool needs: the MCP server, the `/scribble` command where the tool has commands, and permission to use Scribble2Fix without asking each time.
 
 | Tool | Includes |
 |---|---|
-| **Claude Code** | the `claude` CLI and the Code tab of the Claude desktop app |
-| **Claude Desktop** | chats in the Claude desktop app |
+| **Claude** | Claude Code (the `claude` CLI and the Code tab of the Claude desktop app) and Claude Desktop chats |
 | **Codex** | the `codex` CLI, the Codex desktop app and the IDE extension |
+| **GitHub Copilot** | the Copilot CLI and Copilot in VS Code |
+| **Cursor** | the Cursor editor |
+| **Gemini & Antigravity** | Gemini CLI, the Antigravity IDE and the `agy` CLI |
+| **OpenCode** | the `opencode` CLI and the OpenCode desktop app |
+| **Lumo** | chats in Proton's Lumo Desktop app (sign in first, restart Lumo after connecting) |
+
+Using something else? Any tool that runs MCP servers works: see [Connect by hand](docs/manual-setup.md).
 
 Start a new session after connecting. Then:
 
-- **`/scribble`** sends your latest scribble to the AI. Add instructions if you like: `/scribble make it bigger too`. In Codex type `/prompts:scribble`; in Claude Desktop just ask *"look at my latest scribble"*.
-- **The AI can ask for a scribble.** It asks in the chat first. If you agree, a notice pops up (Scribble2Fix starts by itself if it isn't running): press your hotkey, draw, press **Enter**, and the AI continues.
+- **`/scribble`** sends your latest scribble to the AI. Add instructions if you like: `/scribble make it bigger too`. In Codex type `/prompts:scribble`; in Claude Desktop and Lumo just ask *"look at my latest scribble"*. If your AI model can't see images, it tells you so and works from the marks as text.
+- **The AI can ask for a scribble.** It asks in the chat first. If you agree, a card with its question drops in at the top of your screen, with a soft chime and a glowing frame (Scribble2Fix starts by itself if it isn't running). Click **Draw now** or press your hotkey, draw, press **Enter**, and the AI continues. **Not now** tells the AI you declined. The chime can be turned off in Settings.
 - **Several at once**: make a few scribbles in a row and say *"apply my last 3 scribbles"*.
 
-<details>
-<summary><b>Connect manually</b> (if the automatic setup can't find your tool)</summary>
-
-<br>
-
-Use the path where Scribble2Fix is installed:
-
-| Installed with | Path |
-|---|---|
-| Windows | `%LOCALAPPDATA%\Scribble2Fix\scribble2fix.exe` |
-| Windows (.msi) | `C:\Program Files\Scribble2Fix\scribble2fix.exe` |
-| macOS | `/Applications/Scribble2Fix.app/Contents/MacOS/scribble2fix` |
-| Linux (.deb / .rpm) | `/usr/bin/scribble2fix` |
-| Linux (AppImage) | the full path of the `.AppImage` file |
-
-**Claude Code**, Windows (PowerShell):
-
-```powershell
-claude mcp add --scope user scribble2fix -- "$env:LOCALAPPDATA\Scribble2Fix\scribble2fix.exe" mcp
-New-Item -ItemType Directory -Force "$HOME\.claude\commands" | Out-Null
-Invoke-WebRequest https://raw.githubusercontent.com/cweeperde/scribble2fix/main/app/src/scribble.md -OutFile "$HOME\.claude\commands\scribble.md"
-```
-
-**Claude Code**, macOS (on Linux use `/usr/bin/scribble2fix`):
-
-```sh
-claude mcp add --scope user scribble2fix -- /Applications/Scribble2Fix.app/Contents/MacOS/scribble2fix mcp
-mkdir -p ~/.claude/commands
-curl -fsSL https://raw.githubusercontent.com/cweeperde/scribble2fix/main/app/src/scribble.md -o ~/.claude/commands/scribble.md
-```
-
-**Codex**, Windows (PowerShell):
-
-```powershell
-codex mcp add scribble2fix -- "$env:LOCALAPPDATA\Scribble2Fix\scribble2fix.exe" mcp
-New-Item -ItemType Directory -Force "$HOME\.codex\prompts" | Out-Null
-Invoke-WebRequest https://raw.githubusercontent.com/cweeperde/scribble2fix/main/app/src/scribble.md -OutFile "$HOME\.codex\prompts\scribble.md"
-```
-
-**Codex**, macOS (on Linux use `/usr/bin/scribble2fix`):
-
-```sh
-codex mcp add scribble2fix -- /Applications/Scribble2Fix.app/Contents/MacOS/scribble2fix mcp
-mkdir -p ~/.codex/prompts
-curl -fsSL https://raw.githubusercontent.com/cweeperde/scribble2fix/main/app/src/scribble.md -o ~/.codex/prompts/scribble.md
-```
-
-**Codex desktop app without the CLI**: add this to `~/.codex/config.toml` (with `\\` for each backslash on Windows):
-
-```toml
-[mcp_servers.scribble2fix]
-command = "C:\\Users\\<you>\\AppData\\Local\\Scribble2Fix\\scribble2fix.exe"
-args = ["mcp"]
-```
-
-**Claude Desktop**: open **Settings → Developer → Edit Config**, add this under `mcpServers` and restart Claude:
-
-```json
-{
-  "mcpServers": {
-    "scribble2fix": {
-      "command": "C:\\Users\\<you>\\AppData\\Local\\Scribble2Fix\\scribble2fix.exe",
-      "args": ["mcp"]
-    }
-  }
-}
-```
-
-**Any other MCP client**: run `<path> mcp` as a stdio server. Tools: `get_latest_capture`, `get_recent_captures`, `request_scribble`, `wait_for_scribble`.
-
-To remove it: `claude mcp remove --scope user scribble2fix` or `codex mcp remove scribble2fix`, or simply switch it off in Settings.
-
-</details>
+**Connect by hand**: if the automatic setup can't find your tool, or you use another MCP client, follow [docs/manual-setup.md](docs/manual-setup.md). It has the settings for any MCP client and step-by-step setups for Claude, Codex, Copilot, Cursor, Gemini, Antigravity, OpenCode, Lumo and more.
 
 ## Install
 
@@ -342,7 +276,7 @@ On Wayland, apps usually can't register global hotkeys. Add a keyboard shortcut 
 
 <br>
 
-Check that the tool is switched on in **Settings → AI tools**, then start a new session. If it still isn't there, see [Connect manually](#built-for-claude-and-codex).
+Check that the tool is switched on in **Settings → AI tools**, then start a new session. If it still isn't there, see [Connect by hand](docs/manual-setup.md).
 </details>
 
 <details>
