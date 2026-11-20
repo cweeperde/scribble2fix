@@ -5,7 +5,8 @@ as the frozen screen, then the marks are drawn with scripted mouse and
 keyboard input, exactly like a user would.
 
 Writes: overlay.png (hero), demo.gif, result.png (the real export),
-tools.png, chat.png, request.png (the AI request card), onboarding.png.
+tools.png, chat.png, request.png (the AI request card), onboarding.png, all
+with rounded corners and a hairline border (see SHOWN).
 
 Usage: python docs/mockups/render.py
 Needs: pip install playwright pillow && python -m playwright install chromium
@@ -18,7 +19,7 @@ import math
 import pathlib
 import time
 
-from PIL import Image
+from PIL import Image, ImageChops, ImageDraw
 from playwright.sync_api import sync_playwright
 
 HERE = pathlib.Path(__file__).resolve().parent
@@ -74,6 +75,36 @@ addEventListener('DOMContentLoaded', () => {
 """
 
 
+# How wide the README shows each image. Corners and border are sized for that,
+# so they look the same on every image.
+SHOWN = {"overlay.png": 860, "tools.png": 860, "result.png": 700, "chat.png": 800,
+         "request.png": 800, "onboarding.png": 290, "demo.gif": 800}
+RADIUS = 12          # corner radius as shown in the README, in px
+BORDER = (128, 128, 128, 80)  # hairline that works on GitHub's light and dark theme
+
+
+def frame_mask(size, shown):
+    """Rounded-corner alpha mask and hairline border for an image of `size`."""
+    w, h = size
+    k = w / shown  # image px per README px
+    ss = 4         # supersampled for smooth edges
+    box = (0, 0, w * ss - 1, h * ss - 1)
+    mask = Image.new("L", (w * ss, h * ss), 0)
+    ImageDraw.Draw(mask).rounded_rectangle(box, radius=RADIUS * k * ss, fill=255)
+    line = Image.new("RGBA", (w * ss, h * ss), (0, 0, 0, 0))
+    ImageDraw.Draw(line).rounded_rectangle(box, radius=RADIUS * k * ss, outline=BORDER, width=max(1, round(k * ss)))
+    return mask.resize(size, Image.LANCZOS), line.resize(size, Image.LANCZOS)
+
+
+def save_framed(png, name):
+    """Saves a PNG (bytes or path) to docs/images with rounded corners and a border."""
+    im = Image.open(io.BytesIO(png) if isinstance(png, bytes) else png).convert("RGBA")
+    mask, line = frame_mask(im.size, SHOWN[name])
+    im = Image.alpha_composite(im, line)
+    im.putalpha(ImageChops.multiply(im.getchannel("A"), mask))
+    im.save(OUT / name, optimize=True)
+
+
 def url(path):
     return path.resolve().as_uri()
 
@@ -103,13 +134,25 @@ class Recorder:
     def save(self, path, width):
         images = []
         for png, _ in self.frames:
-            im = Image.open(io.BytesIO(png)).convert("RGB")
+            im = Image.open(io.BytesIO(png)).convert("RGBA")
             images.append(im.resize((width, round(im.height * width / im.width)), Image.LANCZOS))
+        # Same rounded corners and border as the PNGs. GIF transparency is all
+        # or nothing, so the corners are cut at half coverage.
+        mask, line = frame_mask(images[0].size, SHOWN[path.name])
+        images = [Image.alpha_composite(im, line).convert("RGB") for im in images]
         palette = images[len(images) // 2].quantize(colors=160, method=Image.Quantize.MEDIANCUT)
-        frames = [im.quantize(palette=palette, dither=Image.Dither.NONE) for im in images]
+        clear = 255  # palette entry for the cut-off corners
+        palette.putpalette(palette.getpalette()[:160 * 3] + [255, 0, 255] * 96)
+        corners = mask.point(lambda a: 255 if a < 128 else 0)
+        frames = []
+        for im in images:
+            f = im.quantize(palette=palette, dither=Image.Dither.NONE)
+            f.paste(clear, mask=corners)
+            frames.append(f)
         durations = [max(20, d) for _, d in self.frames]
         durations[-1] = 2600
-        frames[0].save(path, save_all=True, append_images=frames[1:], duration=durations, loop=0, optimize=True)
+        frames[0].save(path, save_all=True, append_images=frames[1:], duration=durations, loop=0,
+                       transparency=clear, disposal=1)
 
 
 def open_overlay(browser, bg_png, size):
@@ -233,9 +276,8 @@ def hero_and_demo(browser):
     for _ in range(6):
         rec.snap()
 
-    (OUT / "overlay.png").write_bytes(hero)
-    export_png = base64.b64decode(page.evaluate("window.__export.annotated"))
-    (OUT / "result.png").write_bytes(export_png)
+    save_framed(hero, "overlay.png")
+    save_framed(base64.b64decode(page.evaluate("window.__export.annotated")), "result.png")
     rec.save(OUT / "demo.gif", 800)
     page.close()
 
@@ -270,27 +312,31 @@ def tools(browser):
     for c in chips:
         page.mouse.click(c["x"] + c["width"] + 2, c["y"] + c["height"] / 2)
     page.wait_for_timeout(200)
-    page.screenshot(path=str(OUT / "tools.png"))
+    save_framed(page.screenshot(), "tools.png")
     page.close()
 
 
 def static_pages(browser):
-    page = browser.new_page(viewport={"width": 1000, "height": 600})
+    # Plain pages render at 2x, so text stays sharp on high-DPI screens.
+    page = browser.new_page(viewport={"width": 1000, "height": 600}, device_scale_factor=2)
     page.goto(url(HERE / "chat.html"))
     page.wait_for_load_state("networkidle")
-    page.screenshot(path=str(OUT / "chat.png"))
+    save_framed(page.screenshot(), "chat.png")
     page.close()
 
     # The real onboarding window, dark mode, with the stubbed Tauri API, on
     # the step where the AI tools get connected.
-    page = browser.new_page(viewport={"width": 520, "height": 700}, color_scheme="dark")
+    page = browser.new_page(viewport={"width": 520, "height": 700}, color_scheme="dark", device_scale_factor=2)
     page.add_init_script(path=str(HERE / "tauri-stub.js"))
     page.goto(url(UI / "onboarding.html") + "?w=520&h=700")
     page.wait_for_timeout(300)
     page.click("#next")
     page.click("#next")
+    # Everything found starts switched on; show a typical choice instead.
+    for tool in ["copilot", "cursor", "gemini", "lumo"]:
+        page.click(f"input[data-id={tool}]")
     page.wait_for_timeout(300)
-    page.screenshot(path=str(OUT / "onboarding.png"))
+    save_framed(page.screenshot(), "onboarding.png")
     page.close()
 
 
@@ -331,7 +377,7 @@ def request_card(browser):
     card.evaluate("""window.__L.request({ payload: { id: 'a', client: 'Claude', hotkey: 'F6', sound: false,
       reason: 'Mark the buttons you mean', expiresAt: Date.now() + 9 * 60000 + 41000 } })""")
     page.wait_for_timeout(1200)
-    page.screenshot(path=str(OUT / "request.png"))
+    save_framed(page.screenshot(), "request.png")
     page.close()
 
 

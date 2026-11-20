@@ -7,11 +7,18 @@
 ### Scribble on your screen to show your AI what to change.
 
 [![Latest release](https://img.shields.io/github/v/release/cweeperde/scribble2fix?style=flat-square&label=release&color=0a84ff)](https://github.com/cweeperde/scribble2fix/releases/latest)
-[![Downloads](https://img.shields.io/github/downloads/cweeperde/scribble2fix/total?style=flat-square&color=34c759)](https://github.com/cweeperde/scribble2fix/releases)
+[![Downloads](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fcweeperde%2Fscribble2fix%2Fbadges%2Fdownloads.json&style=flat-square)](https://github.com/cweeperde/scribble2fix/releases)
 [![Stars](https://img.shields.io/github/stars/cweeperde/scribble2fix?style=flat-square&color=f5b301)](https://github.com/cweeperde/scribble2fix/stargazers)
 [![License: PolyForm Strict](https://img.shields.io/badge/license-PolyForm%20Strict-ff3b30?style=flat-square)](#license)
+
 [![Works with Claude](https://img.shields.io/badge/works%20with-Claude-D97757?style=flat-square&logo=claude&logoColor=white)](#works-with-your-ai-tools)
-[![Works with Codex](https://img.shields.io/badge/works%20with-Codex-412991?style=flat-square&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyLjYiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI%2BPHBhdGggZD0iTTMgNmw2IDYtNiA2TTEyIDE5aDkiLz48L3N2Zz4%3D&logoColor=white)](#works-with-your-ai-tools)
+[![Codex](https://img.shields.io/badge/-Codex-412991?style=flat-square&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyLjYiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI%2BPHBhdGggZD0iTTMgNmw2IDYtNiA2TTEyIDE5aDkiLz48L3N2Zz4%3D&logoColor=white)](#works-with-your-ai-tools)
+[![GitHub Copilot](https://img.shields.io/badge/-GitHub%20Copilot-24292F?style=flat-square&logo=githubcopilot&logoColor=white)](#works-with-your-ai-tools)
+[![Cursor](https://img.shields.io/badge/-Cursor-1E1E1E?style=flat-square&logo=cursor&logoColor=white)](#works-with-your-ai-tools)
+[![Gemini & Antigravity](https://img.shields.io/badge/-Gemini%20%26%20Antigravity-4C8DF6?style=flat-square&logo=googlegemini&logoColor=white)](#works-with-your-ai-tools)
+[![OpenCode](https://img.shields.io/badge/-OpenCode-211E1E?style=flat-square&logo=opencode&logoColor=white)](#works-with-your-ai-tools)
+[![Lumo](https://img.shields.io/badge/-Lumo-6D4AFF?style=flat-square&logo=proton&logoColor=white)](#works-with-your-ai-tools)
+[![Any MCP client](https://img.shields.io/badge/-any%20MCP%20client-555555?style=flat-square&logo=modelcontextprotocol&logoColor=white)](docs/manual-setup.md)
 
 <br>
 
@@ -159,8 +166,9 @@ Scribble2Fix connects with one click, in the welcome screen or later in **Settin
 | **Gemini & Antigravity** | Gemini CLI, the Antigravity IDE and the `agy` CLI |
 | **OpenCode** | the `opencode` CLI and the OpenCode desktop app |
 | **Lumo** | chats in Proton's Lumo Desktop app (sign in first, restart Lumo after connecting) |
+| **Any other MCP client** | Windsurf, Zed, LM Studio, Jan, your own agent, ...: set up by hand or by your AI, see below |
 
-Using something else? Any tool that runs MCP servers works: see [Connect by hand](docs/manual-setup.md).
+Using something else? Any tool that runs MCP servers works. [Connect by hand](docs/manual-setup.md) has a ready-made prompt: paste it into your AI agent and it sets up Scribble2Fix in the tool of your choice (MCP server, permissions and `/scribble` command).
 
 Start a new session after connecting. Then:
 
@@ -172,7 +180,7 @@ Start a new session after connecting. Then:
 <img src="docs/images/request.png" alt="When the AI asks for a scribble: a card with its question at the top of the screen and a frame in the three mark colors" width="800">
 </div>
 
-**Connect by hand**: if the automatic setup can't find your tool, or you use another MCP client, follow [docs/manual-setup.md](docs/manual-setup.md). It has the settings for any MCP client and step-by-step setups for Claude, Codex, Copilot, Cursor, Gemini, Antigravity, OpenCode, Lumo and more.
+**Connect by hand**: if the automatic setup can't find your tool, or you use another MCP client, follow [docs/manual-setup.md](docs/manual-setup.md). It has a copy-and-paste prompt that lets your AI agent do the setup, the settings for any MCP client and step-by-step setups for Claude, Codex, Copilot, Cursor, Gemini, Antigravity, OpenCode, Lumo and more.
 
 ## Install
 
@@ -306,4 +314,4 @@ To ask for permission, [open a license request](https://github.com/cweeperde/scr
 
 ### Trademarks
 
-Scribble2Fix is an independent project. It isn't affiliated with, endorsed by or sponsored by Anthropic, OpenAI, GitHub, Microsoft, Anysphere (Cursor), Google, OpenCode, Proton or any other company whose tools it works with. Claude, Codex, GitHub Copilot, Cursor, Gemini, Antigravity, OpenCode, Lumo and Proton are trademarks of their respective owners. Their names and logos appear in the app and this README only to show which tools Scribble2Fix connects to. The logos come from [Simple Icons](https://simpleicons.org) (CC0).
+Scribble2Fix is an independent project. It isn't affiliated with, endorsed by or sponsored by Anthropic, OpenAI, GitHub, Microsoft, Anysphere (Cursor), Google, OpenCode, Proton or any other company whose tools it works with. Claude, Codex, GitHub Copilot, Cursor, Gemini, Antigravity, OpenCode, Lumo and Proton are trademarks of their respective owners, as are the names of the other tools mentioned here. Their names and logos appear in the app and this README only to show which tools Scribble2Fix connects to. The logos come from [Simple Icons](https://simpleicons.org) (CC0). Codex is shown with a plain terminal symbol, not an OpenAI logo.

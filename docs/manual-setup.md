@@ -4,12 +4,45 @@ Scribble2Fix sets itself up in one click (welcome screen or **Settings → AI to
 
 Scribble2Fix is an [MCP](https://modelcontextprotocol.io) server. Any AI tool that can run MCP servers can use it: the AI gets your latest scribble and can ask you for a new one.
 
-- [1. Find the path](#1-find-the-path)
-- [2. Any MCP client](#2-any-mcp-client)
-- [3. Step by step for popular tools](#3-step-by-step-for-popular-tools)
-- [4. Remove it again](#4-remove-it-again)
+- [1. Let your AI set it up](#1-let-your-ai-set-it-up)
+- [2. Find the path](#2-find-the-path)
+- [3. Any MCP client](#3-any-mcp-client)
+- [4. Step by step for popular tools](#4-step-by-step-for-popular-tools)
+- [5. Remove it again](#5-remove-it-again)
 
-## 1. Find the path
+## 1. Let your AI set it up
+
+The quickest way for a tool that isn't in the list: copy this prompt into an AI agent that can work on your computer (Claude Code, Codex, Copilot CLI, Cursor, Gemini CLI, OpenCode, ...), replace `<your AI tool>` and send it. The agent finds Scribble2Fix, sets up the MCP server, the permissions and a `/scribble` command, and shows you each change first. It can set up the tool it runs in or any other one.
+
+```text
+Set up Scribble2Fix for me in this AI tool: <your AI tool>
+
+Scribble2Fix (https://github.com/cweeperde/scribble2fix) is a desktop app that lets me scribble on my screen to show an AI what to change. It's also a local MCP server (stdio). Set it up for the tool above step by step, and show me each change before you make it.
+
+1. Find the Scribble2Fix executable and use its absolute path:
+   - Windows: %LOCALAPPDATA%\Scribble2Fix\scribble2fix.exe, or C:\Program Files\Scribble2Fix\scribble2fix.exe (.msi install)
+   - macOS: /Applications/Scribble2Fix.app/Contents/MacOS/scribble2fix
+   - Linux: /usr/bin/scribble2fix, or the .AppImage file (ask me where I saved it)
+   If it isn't there, ask me.
+
+2. Find out how this tool adds MCP servers: its own CLI command, a settings page or a config file. Check the tool's current documentation if you're not sure. Prefer the CLI command. If you edit a file, use the user-wide config (not a project one), keep everything that's already in it, make a backup first, and in JSON or TOML write every backslash of a Windows path as two (\\). If the tool only has a settings page, tell me exactly what to click and enter.
+
+3. Add a local (stdio) MCP server:
+   - name: scribble2fix
+   - command: the path from step 1
+   - arguments: mcp --client "<the tool's name, as I should see it on the request card>"
+   - if the tool has a timeout for MCP tool calls, at least 120 seconds (request_scribble waits up to 50 seconds while I draw)
+
+4. If the tool can allow MCP tools without asking each time (allowlist, trust, auto-approve), allow exactly these four Scribble2Fix tools and nothing else: get_latest_capture, get_recent_captures, request_scribble, wait_for_scribble. They only read my scribbles, and request_scribble always shows me a card on screen first.
+
+5. If the tool supports custom slash commands, prompts or skills, add one called "scribble" with the text from https://raw.githubusercontent.com/cweeperde/scribble2fix/main/app/src/scribble.md. Convert its header and the $ARGUMENTS placeholder to this tool's format, or drop them if the tool has none.
+
+6. Check your work: the edited files must still parse, and if the tool can list its MCP servers, scribble2fix must show up. Then tell me what you changed (files and commands), how to undo it, whether I have to restart the tool or start a new session, and how to use it: /scribble (or this tool's form of it), or "look at my latest scribble".
+```
+
+For Claude, Codex, GitHub Copilot, Cursor, Gemini, Antigravity, OpenCode and Lumo the one-click setup in Scribble2Fix does the same and can undo it with one switch.
+
+## 2. Find the path
 
 Use the path where Scribble2Fix is installed:
 
@@ -23,7 +56,7 @@ Use the path where Scribble2Fix is installed:
 
 In JSON and TOML files, write every `\` as `\\` (`C:\\Users\\you\\AppData\\Local\\Scribble2Fix\\scribble2fix.exe`). The examples below use `<path>` for it.
 
-## 2. Any MCP client
+## 3. Any MCP client
 
 Add a **local (stdio)** MCP server:
 
@@ -64,7 +97,7 @@ Most tools that use an `mcpServers` JSON file take this:
 
 **Models that can't see images**: the scribble is a screenshot. Scribble2Fix also sends every mark as text (kind, color, position, typed labels), and tells the AI to say so if it can't view images, so you know to describe the marks instead.
 
-## 3. Step by step for popular tools
+## 4. Step by step for popular tools
 
 <details>
 <summary><b>Claude Code</b> (CLI and the Code tab of the Claude desktop app)</summary>
@@ -216,7 +249,7 @@ Sign in to Lumo Desktop, open **Customize → Connectors → Add MCP server**, c
 <details>
 <summary><b>Other tools</b> (Windsurf, Zed, LM Studio, Jan, ...)</summary>
 
-Look for "MCP" in the tool's settings and add a local (stdio) server as described in [Any MCP client](#2-any-mcp-client). Where they usually live:
+Look for "MCP" in the tool's settings and add a local (stdio) server as described in [Any MCP client](#3-any-mcp-client). Where they usually live:
 
 | Tool | Where |
 |---|---|
@@ -226,6 +259,6 @@ Look for "MCP" in the tool's settings and add a local (stdio) server as describe
 | Jan, Cherry Studio, Msty | their MCP settings page |
 </details>
 
-## 4. Remove it again
+## 5. Remove it again
 
 Switch the tool off in **Settings → AI tools** (that undoes everything the automatic setup did), or remove the `scribble2fix` entry you added: `claude mcp remove --scope user scribble2fix`, `codex mcp remove scribble2fix`, or delete it from the tool's config file.
