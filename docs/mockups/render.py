@@ -182,8 +182,8 @@ def hero_and_demo(browser):
     scene.close()
 
     page = open_overlay(browser, bg, size)
-    # The soft white light sweep turns into hard bands in a GIF's limited palette.
-    page.add_style_tag(content="#shine, #flash { display: none !important; }")
+    # The soft white light sweeps turn into hard bands in a GIF's limited palette.
+    page.add_style_tag(content="#shine, #flash, #lift::after { display: none !important; }")
     rec = Recorder(page)
     show(page, "mock-screen")  # the screen as it is before the overlay opens
     rec.hold(700)
