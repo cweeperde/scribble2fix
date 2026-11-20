@@ -1,0 +1,32 @@
+name: Contributor agreement
+
+# Every pull request needs the contributor agreement (CONTRIBUTING.md): the
+# author ticks the box in the pull request description. A ruleset makes this
+# check required before merging into main.
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize]
+
+permissions: {}
+
+jobs:
+  agreement:
+    name: Contributor agreement
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check the agreement
+        env:
+          REPO: ${{ github.repository }}
+          AUTHOR: ${{ github.event.pull_request.user.login }}
+          BODY: ${{ github.event.pull_request.body }}
+        run: |
+          if [ "$AUTHOR" = "${REPO%%/*}" ]; then
+            echo "The owner's own pull request."
+            exit 0
+          fi
+          if printf '%s\n' "$BODY" | grep -qiE '^\s*- \[x\] I have read the \[contributor agreement\]'; then
+            echo "@$AUTHOR agreed in this pull request."
+            exit 0
+          fi
+          echo "::error::Please tick the contributor agreement box in the pull request description (see CONTRIBUTING.md)."
+          exit 1

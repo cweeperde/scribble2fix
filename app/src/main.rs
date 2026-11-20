@@ -1279,6 +1279,7 @@ fn open_link(app: AppHandle, which: String) -> Result<(), String> {
         "issues" => format!("{REPO_URL}/issues"),
         "manual" => format!("{REPO_URL}/blob/main/docs/manual-setup.md"),
         "author" => "https://github.com/cweeperde".to_string(),
+        "keinplan0" => "https://github.com/KeinPlan0".to_string(),
         _ => return Err("unknown link".into()),
     };
     app.opener().open_url(url, None::<&str>).map_err(err)
