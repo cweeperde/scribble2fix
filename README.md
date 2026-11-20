@@ -304,8 +304,6 @@ Personal and other noncommercial use is free. For use at work or in a company, [
 
 Found a bug or have an idea? [Open an issue](https://github.com/cweeperde/scribble2fix/issues/new/choose). If Scribble2Fix saves you time, a ⭐ helps others find it.
 
-Want to contribute code? Read [CONTRIBUTING.md](CONTRIBUTING.md) first: pull requests are welcome, but they need the contributor agreement because Scribble2Fix isn't open source.
-
 ## License
 
 © 2026 [cweeper](https://github.com/cweeperde). Source available under the [PolyForm Strict License 1.0.0](LICENSE).

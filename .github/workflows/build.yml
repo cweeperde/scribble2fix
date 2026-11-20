@@ -20,8 +20,6 @@ on:
       - LICENSE
       - docs/**
       - .github/ISSUE_TEMPLATE/**
-      - .github/pull_request_template.md
-      - CONTRIBUTING.md
   pull_request:
     paths-ignore: *docs-only
   workflow_dispatch:
