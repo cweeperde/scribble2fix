@@ -79,9 +79,6 @@ struct AppState {
 /// A window on screen, in physical pixels like `Area`.
 #[derive(Clone)]
 struct ScreenWindow {
-    /// The macOS window number (0 elsewhere).
-    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
-    id: u32,
     x: f64,
     y: f64,
     width: f64,
@@ -111,7 +108,6 @@ fn screen_windows(area: &Area) -> Vec<ScreenWindow> {
             .filter(|w| w.pid().is_ok_and(|p| p != own) && !w.is_minimized().unwrap_or(false))
             .filter_map(|w| {
                 Some(ScreenWindow {
-                    id: 0,
                     x: w.x().ok()? as f64,
                     y: w.y().ok()? as f64,
                     width: w.width().ok()? as f64,
@@ -183,7 +179,11 @@ mod macos {
         NSApplicationActivationOptions, NSPopUpMenuWindowLevel, NSRunningApplication, NSScreen,
         NSWindow, NSWindowCollectionBehavior,
     };
-    use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
+    use block2::RcBlock;
+    use objc2_app_kit::{NSWorkspace, NSWorkspaceActiveSpaceDidChangeNotification};
+    use objc2_foundation::NSNotification;
+    use std::ptr::NonNull;
+    use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU64, Ordering};
     use tauri::{AppHandle, Manager, WebviewWindow};
 
     #[link(name = "CoreGraphics", kind = "framework")]
@@ -311,7 +311,6 @@ mod macos {
                     return None;
                 }
                 Some(ScreenWindow {
-                    id: number("kCGWindowNumber")? as u32,
                     x: r.origin.x,
                     y: r.origin.y,
                     width: r.size.width,
@@ -321,6 +320,30 @@ mod macos {
                 })
             })
             .collect()
+    }
+
+    static SPACE_CHANGES: AtomicU64 = AtomicU64::new(0);
+
+    /// Counts Space switches (macOS tells every app), also to and from
+    /// Spaces without windows. Call once, on the main thread.
+    pub fn watch_spaces() {
+        let block = RcBlock::new(|_: NonNull<NSNotification>| {
+            SPACE_CHANGES.fetch_add(1, Ordering::SeqCst);
+        });
+        let observer = unsafe {
+            NSWorkspace::sharedWorkspace().notificationCenter().addObserverForName_object_queue_usingBlock(
+                Some(NSWorkspaceActiveSpaceDidChangeNotification),
+                None,
+                None,
+                &block,
+            )
+        };
+        // Observes for the app's lifetime.
+        std::mem::forget(observer);
+    }
+
+    pub fn space_changes() -> u64 {
+        SPACE_CHANGES.load(Ordering::SeqCst)
     }
 
     static FRONT_PID: AtomicI32 = AtomicI32::new(0);
@@ -362,6 +385,7 @@ mod macos {
     }
     pub fn remember_front_app(_pid: u64) {}
     pub fn restore_front_app() {}
+    pub fn watch_spaces() {}
 }
 
 // ---------------------------------------------------------------- capture
@@ -630,9 +654,10 @@ fn capture(app: &AppHandle, event: &str) -> Result<(), String> {
 
 /// The frozen overlay shows on every desktop (Windows) or Space (macOS) and
 /// keeps the focus when the user switches, so it never notices by itself.
-/// Instead, a window of the desktop that was frozen is checked a few times a
-/// second: once it's no longer on the current desktop, the overlay is told
-/// (`left`), and it freezes the new desktop unless something was drawn.
+/// Instead the current desktop is checked a few times a second: once it's
+/// another one, the overlay is told (`left`), and it freezes the new desktop
+/// unless something was drawn. (On Linux the overlay sits on one workspace
+/// and loses the focus when the user leaves it, which it notices itself.)
 fn watch_desktop(app: &AppHandle, marker: Option<DesktopMarker>) {
     let state = app.state::<AppState>();
     let generation = state.freeze_generation.fetch_add(1, Ordering::SeqCst) + 1;
@@ -655,10 +680,45 @@ fn watch_desktop(app: &AppHandle, marker: Option<DesktopMarker>) {
     });
 }
 
-/// A window on the desktop being frozen: the frontmost normal window of
-/// another app that the system places on that desktop.
+/// Windows: which virtual desktop is current. Explorer keeps its id in the
+/// registry (Windows 11 under VirtualDesktops, Windows 10 under the session),
+/// also when the desktop has no windows. If that's missing, a window of the
+/// desktop stands in for it.
 #[cfg(windows)]
-type DesktopMarker = isize;
+struct DesktopMarker {
+    desktop: Option<Vec<u8>>,
+    window: Option<isize>,
+}
+
+#[cfg(windows)]
+fn current_virtual_desktop() -> Option<Vec<u8>> {
+    use windows::core::{w, HSTRING};
+    use windows::Win32::System::Registry::{RegGetValueW, HKEY_CURRENT_USER, RRF_RT_REG_BINARY};
+    use windows::Win32::System::RemoteDesktop::ProcessIdToSessionId;
+    let mut session = 0u32;
+    let _ = unsafe { ProcessIdToSessionId(std::process::id(), &mut session) };
+    let keys = [
+        r"Software\Microsoft\Windows\CurrentVersion\Explorer\VirtualDesktops".to_string(),
+        format!(r"Software\Microsoft\Windows\CurrentVersion\Explorer\SessionInfo\{session}\VirtualDesktops"),
+    ];
+    keys.iter().find_map(|key| {
+        let mut id = [0u8; 16];
+        let mut size = id.len() as u32;
+        let found = unsafe {
+            RegGetValueW(
+                HKEY_CURRENT_USER,
+                &HSTRING::from(key.as_str()),
+                w!("CurrentVirtualDesktop"),
+                RRF_RT_REG_BINARY,
+                None,
+                Some(id.as_mut_ptr().cast()),
+                Some(&mut size),
+            )
+        }
+        .is_ok();
+        (found && size == 16).then(|| id.to_vec())
+    })
+}
 
 #[cfg(windows)]
 fn desktop_marker() -> Option<DesktopMarker> {
@@ -671,6 +731,9 @@ fn desktop_marker() -> Option<DesktopMarker> {
     use windows::Win32::UI::WindowsAndMessaging::{
         EnumWindows, GetWindowThreadProcessId, IsWindowVisible,
     };
+    if let Some(desktop) = current_virtual_desktop() {
+        return Some(DesktopMarker { desktop: Some(desktop), window: None });
+    }
     unsafe extern "system" fn collect(hwnd: HWND, list: LPARAM) -> BOOL {
         unsafe { (*(list.0 as *mut Vec<HWND>)).push(hwnd) };
         BOOL(1)
@@ -683,17 +746,16 @@ fn desktop_marker() -> Option<DesktopMarker> {
         // Front to back.
         let _ = EnumWindows(Some(collect), LPARAM(&mut all as *mut _ as isize));
         let own = std::process::id();
-        all.into_iter()
-            .find(|&hwnd| {
-                let mut pid = 0u32;
-                GetWindowThreadProcessId(hwnd, Some(&mut pid));
-                pid != own
-                    && IsWindowVisible(hwnd).as_bool()
-                    // Windows shown on every desktop have no desktop id.
-                    && manager.GetWindowDesktopId(hwnd).is_ok_and(|id| id != GUID::zeroed())
-                    && manager.IsWindowOnCurrentVirtualDesktop(hwnd).is_ok_and(|on| on.as_bool())
-            })
-            .map(|hwnd| hwnd.0 as isize)
+        let window = all.into_iter().find(|&hwnd| {
+            let mut pid = 0u32;
+            GetWindowThreadProcessId(hwnd, Some(&mut pid));
+            pid != own
+                && IsWindowVisible(hwnd).as_bool()
+                // Windows shown on every desktop have no desktop id.
+                && manager.GetWindowDesktopId(hwnd).is_ok_and(|id| id != GUID::zeroed())
+                && manager.IsWindowOnCurrentVirtualDesktop(hwnd).is_ok_and(|on| on.as_bool())
+        })?;
+        Some(DesktopMarker { desktop: None, window: Some(window.0 as isize) })
     }
 }
 
@@ -705,7 +767,11 @@ fn desktop_left(marker: &DesktopMarker) -> bool {
     };
     use windows::Win32::UI::Shell::{IVirtualDesktopManager, VirtualDesktopManager};
     use windows::Win32::UI::WindowsAndMessaging::IsWindow;
-    let hwnd = HWND(*marker as _);
+    if let Some(desktop) = &marker.desktop {
+        return current_virtual_desktop().is_some_and(|now| &now != desktop);
+    }
+    let Some(window) = marker.window else { return false };
+    let hwnd = HWND(window as _);
     unsafe {
         let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
         let Ok(manager) =
@@ -718,18 +784,18 @@ fn desktop_left(marker: &DesktopMarker) -> bool {
     }
 }
 
+/// macOS: how many Space switches there were so far (`macos::watch_spaces`).
 #[cfg(target_os = "macos")]
-type DesktopMarker = u32;
+type DesktopMarker = u64;
 
 #[cfg(target_os = "macos")]
 fn desktop_marker() -> Option<DesktopMarker> {
-    macos::app_windows().first().map(|w| w.id)
+    Some(macos::space_changes())
 }
 
-/// Windows of other Spaces aren't on screen.
 #[cfg(target_os = "macos")]
 fn desktop_left(marker: &DesktopMarker) -> bool {
-    !macos::app_windows().iter().any(|w| w.id == *marker)
+    macos::space_changes() != *marker
 }
 
 #[cfg(not(any(windows, target_os = "macos")))]
@@ -1941,6 +2007,7 @@ fn main() {
             storage::hold_app_lock();
             let handle = app.handle();
             create_windows(handle)?;
+            macos::watch_spaces();
             create_tray(handle)?;
 
             let config = storage::load_config();
