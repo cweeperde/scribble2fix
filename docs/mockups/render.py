@@ -140,9 +140,20 @@ class Recorder:
         # or nothing, so the corners are cut at half coverage.
         mask, line = frame_mask(images[0].size, SHOWN[path.name])
         images = [Image.alpha_composite(im, line).convert("RGB") for im in images]
-        palette = images[len(images) // 2].quantize(colors=160, method=Image.Quantize.MEDIANCUT)
+        # One palette for the whole GIF: learned from frames spread over the
+        # demo, plus the app's exact colors, so the marks keep their green, red
+        # and blue (a palette from one frame turned the green turquoise).
+        picks = images[:: max(1, len(images) // 8)]
+        sample = Image.new("RGB", (images[0].width, images[0].height * len(picks)))
+        for i, im in enumerate(picks):
+            sample.paste(im, (0, i * im.height))
+        learned = sample.quantize(colors=247, method=Image.Quantize.MEDIANCUT).getpalette()[: 247 * 3]
+        exact = [(0x34, 0xC7, 0x59), (0xFF, 0x3B, 0x30), (0x0A, 0x84, 0xFF), (255, 255, 255),
+                 (0x18, 0x18, 0x1C), (0x1E, 0x1E, 0x22), (0, 0, 0)]
+        palette = Image.new("P", (1, 1))
         clear = 255  # palette entry for the cut-off corners
-        palette.putpalette(palette.getpalette()[:160 * 3] + [255, 0, 255] * 96)
+        colors = learned + [c for rgb in exact for c in rgb]
+        palette.putpalette(colors + [255, 0, 255] * (256 - len(colors) // 3))
         corners = mask.point(lambda a: 255 if a < 128 else 0)
         frames = []
         for im in images:
