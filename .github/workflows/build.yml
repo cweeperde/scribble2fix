@@ -21,6 +21,7 @@ on:
       - docs/**
       - .github/ISSUE_TEMPLATE/**
       - .github/pull_request_template.md
+      - .github/contributor-agreement.md
       - CONTRIBUTING.md
   pull_request:
     paths-ignore: *docs-only

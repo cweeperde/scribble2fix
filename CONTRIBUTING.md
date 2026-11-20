@@ -5,11 +5,11 @@ Thanks for helping! Bug reports and ideas are welcome as [issues](https://github
 ## How to contribute
 
 1. For anything bigger than a small fix, open an issue first so we can agree on the approach.
-2. Fork the repository (or, if you have write access, create a branch). Never push to `main` or create `v*` tags: releases go out to every user through auto-update.
+2. Fork the repository and create a branch for your change.
 3. Make your change and test it on your platform. Keep pull requests focused on one thing.
-4. Open a pull request against `main` and tick the agreement in the template.
+4. Open a pull request against `main` and tick the agreement in the template. A check blocks the merge until you do.
 
-The maintainer reviews, merges and releases.
+The maintainers review, merge and release. Maintainers with write access may also push to `main` and create release tags; they sign the agreement once for all their contributions (see below).
 
 ## Building locally
 
@@ -30,10 +30,14 @@ Note: running a development build registers its own path as the `scribble2fix` M
 By opening a pull request or otherwise submitting a contribution (code, documentation, images or other material) to this repository, you agree to the following:
 
 1. **Your right to contribute.** The contribution is your own original work, or you have the right to submit it under these terms, and it doesn't knowingly infringe anyone else's rights.
-2. **Rights for the maintainer.** You transfer to cweeper, the maintainer of Scribble2Fix, all rights in your contribution to the extent the law allows. Where a transfer isn't possible (for example the author's copyright under German law), you grant cweeper an exclusive, worldwide, perpetual, irrevocable, royalty-free and transferable license to use, copy, change, combine with other work, publish, distribute and sublicense the contribution, in any form and under any license, including commercial and closed-source licenses.
+2. **Rights for the owner.** You transfer to cweeper, the owner of Scribble2Fix, all rights in your contribution to the extent the law allows. Where a transfer isn't possible (for example the author's copyright under German law), you grant cweeper an exclusive, worldwide, perpetual, irrevocable, royalty-free and transferable license to use, copy, change, combine with other work, publish, distribute and sublicense the contribution, in any form and under any license, including commercial and closed-source licenses.
 3. **Your own use.** cweeper grants you back a non-exclusive license to use your own contribution in your other work, independent of Scribble2Fix.
 4. **No obligation.** cweeper doesn't have to use or merge your contribution and may change or remove it at any time.
 5. **No payment or warranty.** You don't receive payment for the contribution, and you provide it as is, without warranty.
 6. **Moral rights.** As far as the law allows, you agree not to assert moral rights (such as the right to be named or to object to changes) against cweeper or anyone licensed by them. You may still be credited in the commit history.
 
 If you can't agree to this, please open an issue describing the change instead of sending code.
+
+### Signing once for all contributions
+
+If you contribute regularly, or have write access and push without pull requests, sign the agreement once for all your past and future contributions: add your line to [.github/contributor-agreement.md](.github/contributor-agreement.md) yourself, from your own GitHub account. After that the pull request check passes for you without the box.
