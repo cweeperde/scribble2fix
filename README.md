@@ -303,3 +303,7 @@ Found a bug or have an idea? [Open an issue](https://github.com/cweeperde/scribb
 - **Needs permission**: commercial use (including use at work), changed versions, and redistributing the app or its code.
 
 To ask for permission, [open a license request](https://github.com/cweeperde/scribble2fix/issues/new?template=license_request.yml).
+
+### Trademarks
+
+Scribble2Fix is an independent project. It isn't affiliated with, endorsed by or sponsored by Anthropic, OpenAI, GitHub, Microsoft, Anysphere (Cursor), Google, OpenCode, Proton or any other company whose tools it works with. Claude, Codex, GitHub Copilot, Cursor, Gemini, Antigravity, OpenCode, Lumo and Proton are trademarks of their respective owners. Their names and logos appear in the app and this README only to show which tools Scribble2Fix connects to. The logos come from [Simple Icons](https://simpleicons.org) (CC0).
