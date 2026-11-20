@@ -329,12 +329,16 @@ listen('capture', async ({ payload }) => {
 // Left the frozen screen before drawing anything (switched to another
 // desktop, app or monitor): freeze what's in front now instead of keeping
 // the old picture up. Ignored right after it came up, while focus settles.
-addEventListener('blur', () => {
+function leftScreen() {
   if (!shownAt || armed || busy || textInput || current || marks.length) return;
   if (Date.now() - shownAt < 700) return;
   shownAt = 0;
   invoke('refreeze').catch(() => {});
-});
+}
+addEventListener('blur', leftScreen);
+// Switched to another desktop or Space: the overlay shows on all of them and
+// keeps the focus, so the app checks that itself and says so here.
+listen('left', leftScreen);
 
 // The hotkey armed the tool: the screen is NOT frozen yet. Show only the hint
 // pill over the live screen; the first click freezes it (see `frozen` below),

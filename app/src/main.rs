@@ -72,11 +72,16 @@ struct AppState {
     hotkey_paused: AtomicBool,
     /// The windows on screen when it froze, front to back.
     windows: Mutex<Vec<ScreenWindow>>,
+    /// Bumped with every freeze, so an older desktop watcher stops.
+    freeze_generation: AtomicU64,
 }
 
 /// A window on screen, in physical pixels like `Area`.
 #[derive(Clone)]
 struct ScreenWindow {
+    /// The macOS window number (0 elsewhere).
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+    id: u32,
     x: f64,
     y: f64,
     width: f64,
@@ -106,6 +111,7 @@ fn screen_windows(area: &Area) -> Vec<ScreenWindow> {
             .filter(|w| w.pid().is_ok_and(|p| p != own) && !w.is_minimized().unwrap_or(false))
             .filter_map(|w| {
                 Some(ScreenWindow {
+                    id: 0,
                     x: w.x().ok()? as f64,
                     y: w.y().ok()? as f64,
                     width: w.width().ok()? as f64,
@@ -305,6 +311,7 @@ mod macos {
                     return None;
                 }
                 Some(ScreenWindow {
+                    id: number("kCGWindowNumber")? as u32,
                     x: r.origin.x,
                     y: r.origin.y,
                     width: r.size.width,
@@ -602,6 +609,8 @@ fn capture(app: &AppHandle, event: &str) -> Result<(), String> {
         client: r.client,
         reason: r.reason,
     });
+    // Picked before the overlay covers the screen.
+    let marker = desktop_marker();
     overlay
         .emit(
             event,
@@ -614,7 +623,126 @@ fn capture(app: &AppHandle, event: &str) -> Result<(), String> {
                 top: macos::screen_top(app, area.x as f64 / area.scale, area.width as f64 / area.scale),
             },
         )
-        .map_err(err)
+        .map_err(err)?;
+    watch_desktop(app, marker);
+    Ok(())
+}
+
+/// The frozen overlay shows on every desktop (Windows) or Space (macOS) and
+/// keeps the focus when the user switches, so it never notices by itself.
+/// Instead, a window of the desktop that was frozen is checked a few times a
+/// second: once it's no longer on the current desktop, the overlay is told
+/// (`left`), and it freezes the new desktop unless something was drawn.
+fn watch_desktop(app: &AppHandle, marker: Option<DesktopMarker>) {
+    let state = app.state::<AppState>();
+    let generation = state.freeze_generation.fetch_add(1, Ordering::SeqCst) + 1;
+    let Some(marker) = marker else { return };
+    let app = app.clone();
+    thread::spawn(move || loop {
+        thread::sleep(Duration::from_millis(250));
+        let state = app.state::<AppState>();
+        if state.freeze_generation.load(Ordering::SeqCst) != generation
+            || !state.active.load(Ordering::SeqCst)
+        {
+            return;
+        }
+        if desktop_left(&marker) {
+            if let Some(overlay) = app.get_webview_window("overlay") {
+                let _ = overlay.emit("left", ());
+            }
+            return;
+        }
+    });
+}
+
+/// A window on the desktop being frozen: the frontmost normal window of
+/// another app that the system places on that desktop.
+#[cfg(windows)]
+type DesktopMarker = isize;
+
+#[cfg(windows)]
+fn desktop_marker() -> Option<DesktopMarker> {
+    use windows::core::{BOOL, GUID};
+    use windows::Win32::Foundation::{HWND, LPARAM};
+    use windows::Win32::System::Com::{
+        CoCreateInstance, CoInitializeEx, CLSCTX_ALL, COINIT_APARTMENTTHREADED,
+    };
+    use windows::Win32::UI::Shell::{IVirtualDesktopManager, VirtualDesktopManager};
+    use windows::Win32::UI::WindowsAndMessaging::{
+        EnumWindows, GetWindowThreadProcessId, IsWindowVisible,
+    };
+    unsafe extern "system" fn collect(hwnd: HWND, list: LPARAM) -> BOOL {
+        unsafe { (*(list.0 as *mut Vec<HWND>)).push(hwnd) };
+        BOOL(1)
+    }
+    unsafe {
+        let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
+        let manager: IVirtualDesktopManager =
+            CoCreateInstance(&VirtualDesktopManager, None, CLSCTX_ALL).ok()?;
+        let mut all: Vec<HWND> = Vec::new();
+        // Front to back.
+        let _ = EnumWindows(Some(collect), LPARAM(&mut all as *mut _ as isize));
+        let own = std::process::id();
+        all.into_iter()
+            .find(|&hwnd| {
+                let mut pid = 0u32;
+                GetWindowThreadProcessId(hwnd, Some(&mut pid));
+                pid != own
+                    && IsWindowVisible(hwnd).as_bool()
+                    // Windows shown on every desktop have no desktop id.
+                    && manager.GetWindowDesktopId(hwnd).is_ok_and(|id| id != GUID::zeroed())
+                    && manager.IsWindowOnCurrentVirtualDesktop(hwnd).is_ok_and(|on| on.as_bool())
+            })
+            .map(|hwnd| hwnd.0 as isize)
+    }
+}
+
+#[cfg(windows)]
+fn desktop_left(marker: &DesktopMarker) -> bool {
+    use windows::Win32::Foundation::HWND;
+    use windows::Win32::System::Com::{
+        CoCreateInstance, CoInitializeEx, CLSCTX_ALL, COINIT_APARTMENTTHREADED,
+    };
+    use windows::Win32::UI::Shell::{IVirtualDesktopManager, VirtualDesktopManager};
+    use windows::Win32::UI::WindowsAndMessaging::IsWindow;
+    let hwnd = HWND(*marker as _);
+    unsafe {
+        let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
+        let Ok(manager) =
+            CoCreateInstance::<_, IVirtualDesktopManager>(&VirtualDesktopManager, None, CLSCTX_ALL)
+        else {
+            return false;
+        };
+        IsWindow(Some(hwnd)).as_bool()
+            && manager.IsWindowOnCurrentVirtualDesktop(hwnd).is_ok_and(|on| !on.as_bool())
+    }
+}
+
+#[cfg(target_os = "macos")]
+type DesktopMarker = u32;
+
+#[cfg(target_os = "macos")]
+fn desktop_marker() -> Option<DesktopMarker> {
+    macos::app_windows().first().map(|w| w.id)
+}
+
+/// Windows of other Spaces aren't on screen.
+#[cfg(target_os = "macos")]
+fn desktop_left(marker: &DesktopMarker) -> bool {
+    !macos::app_windows().iter().any(|w| w.id == *marker)
+}
+
+#[cfg(not(any(windows, target_os = "macos")))]
+type DesktopMarker = ();
+
+#[cfg(not(any(windows, target_os = "macos")))]
+fn desktop_marker() -> Option<DesktopMarker> {
+    None
+}
+
+#[cfg(not(any(windows, target_os = "macos")))]
+fn desktop_left(_marker: &DesktopMarker) -> bool {
+    false
 }
 
 #[derive(Serialize, Clone)]
@@ -651,7 +779,20 @@ fn frozen_pixels(state: State<AppState>) -> Result<tauri::ipc::Response, String>
 #[tauri::command]
 fn show_overlay(window: WebviewWindow) -> Result<(), String> {
     move_to_current_desktop(&window);
+    // Linux: shown on all workspaces for a moment and then pinned again, so
+    // the window manager puts it on the current one instead of switching
+    // back to the workspace it was on before.
+    #[cfg(target_os = "linux")]
+    let _ = window.set_visible_on_all_workspaces(true);
     window.show().map_err(err)?;
+    #[cfg(target_os = "linux")]
+    {
+        let window = window.clone();
+        thread::spawn(move || {
+            thread::sleep(Duration::from_millis(200));
+            let _ = window.set_visible_on_all_workspaces(false);
+        });
+    }
     if cfg!(target_os = "macos") {
         macos::above_menu_bar(&window);
     } else {
