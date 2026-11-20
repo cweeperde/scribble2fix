@@ -11,13 +11,13 @@
 [![Stars](https://img.shields.io/github/stars/cweeperde/scribble2fix?style=flat-square&color=f5b301)](https://github.com/cweeperde/scribble2fix/stargazers)
 [![License: PolyForm Strict](https://img.shields.io/badge/license-PolyForm%20Strict-ff3b30?style=flat-square)](#license)
 
-[![Works with Claude](https://img.shields.io/badge/works%20with-Claude-D97757?style=flat-square&logo=claude&logoColor=white)](#works-with-your-ai-tools)
-[![Codex](https://img.shields.io/badge/-Codex-412991?style=flat-square&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyLjYiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI%2BPHBhdGggZD0iTTMgNmw2IDYtNiA2TTEyIDE5aDkiLz48L3N2Zz4%3D&logoColor=white)](#works-with-your-ai-tools)
-[![GitHub Copilot](https://img.shields.io/badge/-GitHub%20Copilot-24292F?style=flat-square&logo=githubcopilot&logoColor=white)](#works-with-your-ai-tools)
-[![Cursor](https://img.shields.io/badge/-Cursor-1E1E1E?style=flat-square&logo=cursor&logoColor=white)](#works-with-your-ai-tools)
-[![Gemini & Antigravity](https://img.shields.io/badge/-Gemini%20%26%20Antigravity-4C8DF6?style=flat-square&logo=googlegemini&logoColor=white)](#works-with-your-ai-tools)
-[![OpenCode](https://img.shields.io/badge/-OpenCode-211E1E?style=flat-square&logo=opencode&logoColor=white)](#works-with-your-ai-tools)
-[![Lumo](https://img.shields.io/badge/-Lumo-6D4AFF?style=flat-square&logo=proton&logoColor=white)](#works-with-your-ai-tools)
+[![Claude](https://img.shields.io/badge/-Claude-555555?style=flat-square&logo=claude&logoColor=white)](#works-with-your-ai-tools)
+[![Codex](https://img.shields.io/badge/-Codex-555555?style=flat-square&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyLjYiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI%2BPHBhdGggZD0iTTMgNmw2IDYtNiA2TTEyIDE5aDkiLz48L3N2Zz4%3D&logoColor=white)](#works-with-your-ai-tools)
+[![GitHub Copilot](https://img.shields.io/badge/-GitHub%20Copilot-555555?style=flat-square&logo=githubcopilot&logoColor=white)](#works-with-your-ai-tools)
+[![Cursor](https://img.shields.io/badge/-Cursor-555555?style=flat-square&logo=cursor&logoColor=white)](#works-with-your-ai-tools)
+[![Gemini & Antigravity](https://img.shields.io/badge/-Gemini%20%26%20Antigravity-555555?style=flat-square&logo=googlegemini&logoColor=white)](#works-with-your-ai-tools)
+[![OpenCode](https://img.shields.io/badge/-OpenCode-555555?style=flat-square&logo=opencode&logoColor=white)](#works-with-your-ai-tools)
+[![Lumo](https://img.shields.io/badge/-Lumo-555555?style=flat-square&logo=proton&logoColor=white)](#works-with-your-ai-tools)
 [![Any MCP client](https://img.shields.io/badge/-any%20MCP%20client-555555?style=flat-square&logo=modelcontextprotocol&logoColor=white)](docs/manual-setup.md)
 
 <br>
