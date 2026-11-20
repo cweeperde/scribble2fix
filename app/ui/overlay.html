@@ -57,6 +57,13 @@
   body.intro #hint { animation: hint-in 0.5s var(--ease) 0.4s backwards; }
   body.outro #toolbar, body.outro #hint, body.outro #frame { transition: opacity 0.16s, transform 0.16s; opacity: 0; transform: translateY(-6px); }
   @keyframes settle { from { transform: scale(1.014); } to { transform: none; } }
+
+  /* ---------------- armed (hotkey pressed, not yet drawing)
+     The overlay is see-through: the screen stays live, keyboard focus stays
+     with the user's app and they can still switch windows or desktops. Only
+     the hint pill shows; the first click freezes the screen. */
+  html.armed, html.armed body { background: transparent; }
+  html.armed #toolbar-pos, html.armed #frame { display: none; }
   @keyframes flash { from { opacity: 0.1; } to { opacity: 0; } }
   @keyframes vignette { 0% { opacity: 0; } 25% { opacity: 1; } 100% { opacity: 0; } }
   @keyframes shine { 0% { opacity: 1; background-position: 100% 0; } 85% { opacity: 1; } 100% { opacity: 0; background-position: 0 0; } }
@@ -262,6 +269,7 @@ const LABEL_BG = '#18181c';
 
 const $ = (id) => document.getElementById(id);
 const bg = $('bg'), fg = $('fg'), live = $('live');
+const bgCtx = bg.getContext('2d');
 const fgCtx = fg.getContext('2d'), liveCtx = live.getContext('2d');
 const toolbar = $('toolbar'), toolbarPos = $('toolbar-pos'), hint = $('hint');
 
@@ -284,26 +292,50 @@ const ratio = () => (W && innerWidth ? W / innerWidth : devicePixelRatio);
 
 // ------------------------------------------------------------ capture lifecycle
 
-listen('capture', async ({ payload }) => {
-  reset(payload.request);
+let armed = false;           // waiting for the first click; the screen is still live
+
+// The hotkey armed the tool: the screen is NOT frozen yet. Show only the hint
+// pill over the live screen; the first click freezes it (see `frozen` below),
+// so the user can still switch windows or desktops first.
+listen('arm', ({ payload }) => {
+  armed = true;
   simple = payload.simple;
   toolbar.classList.toggle('simple', simple);
   if (simple) size = DEFAULT_SIZE;
+  reset(payload.request);
   W = payload.width; H = payload.height;
   safeTop = payload.top?.safeTop || 0;
   document.documentElement.style.setProperty('--safe-top', safeTop + 'px');
   setFrameNotch(payload.top?.notch);
   for (const c of [bg, fg, live]) { c.width = W; c.height = H; }
-  const buf = await invoke('frozen_pixels');
-  bg.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(buf), W, H), 0, 0);
-  placeToolbar();
+  setArmedHint(payload.cancelKey);
+  document.documentElement.classList.add('armed');
   updateButtons();
+  invoke('show_overlay_armed');
+});
+
+// The screen freezes the moment the user starts drawing: the freezing click
+// already started the first stroke (pointerdown below). Paint the screenshot
+// over the live screen and bring up the toolbar.
+listen('frozen', async ({ payload }) => {
+  armed = false;
+  document.documentElement.classList.remove('armed');
+  W = payload.width; H = payload.height;
+  // Fetch the pixels before resizing: the resize clears the canvases, and
+  // the stroke from the freezing click must only blink out for a moment.
+  const buf = await invoke('frozen_pixels');
+  for (const c of [bg, fg, live]) { c.width = W; c.height = H; }
+  bgCtx.putImageData(new ImageData(new Uint8ClampedArray(buf), W, H), 0, 0);
+  setHint(payload.request);
+  placeToolbar();
+  redraw(); // marks committed before the freeze (a single click) survive the resize
+  renderLive(); // and the stroke still in flight from the freezing click
   // The shutter zoom and vignette center on the mouse (CSS px).
   const k = ratio();
   const root = document.documentElement.style;
   root.setProperty('--cx', payload.cursor[0] / k + 'px'); root.setProperty('--cy', payload.cursor[1] / k + 'px');
-  playIntro(); // starts just before the window appears, so the first frame is already animated
-  await invoke('show_overlay');
+  playIntro(); // starts right at the freeze, so it reads as a camera shutter
+  await invoke('show_overlay'); // now take the focus, for Enter / Esc / tools
 });
 
 // Restarts the CSS intro animations (shutter, ring, frame, toolbar).
@@ -320,8 +352,16 @@ function reset(request) {
   closeTextInput(false);
   marks = []; undoStack = []; redoStack = []; current = null; busy = false;
   tool = 'pen';
+  document.body.classList.remove('outro', 'sending');
+  bgCtx.clearRect(0, 0, bg.width, bg.height);
   fgCtx.clearRect(0, 0, fg.width, fg.height);
   liveCtx.clearRect(0, 0, live.width, live.height);
+  setHint(request);
+  hint.classList.remove('hidden');
+  updateButtons();
+}
+
+function setHint(request) {
   hint.textContent = '';
   hint.classList.toggle('ask', !!request);
   if (request) {
@@ -335,8 +375,13 @@ function reset(request) {
   } else {
     hint.append('Draw on the screen · ', kbd('Enter'), ' copy · ', kbd('Esc'), ' cancel');
   }
-  hint.classList.remove('hidden');
-  updateButtons();
+}
+
+// While armed the screen is still live: say what a click does, and how out.
+function setArmedHint(cancelKey) {
+  hint.textContent = '';
+  hint.classList.remove('ask');
+  hint.append('Click to start drawing · ', kbd(cancelKey), ' cancel');
 }
 
 function kbd(text) { const k = document.createElement('kbd'); k.textContent = text; return k; }
@@ -392,8 +437,16 @@ const newMark = (kind, pts) => ({ kind, mode, w: SIZES[size] * ratio(), pts });
 live.addEventListener('pointerdown', (e) => {
   if (busy) return;
   const p = toCanvas(e);
-  if (e.button === 2) { if (!simple) eraseAt(p); return; }
+  if (e.button === 2) { if (!simple && !armed) eraseAt(p); return; }
   if (e.button !== 0) return;
+  if (armed) {
+    // The first click freezes the screen, and this very drag becomes the
+    // first stroke: it is already being drawn while the screenshot is taken.
+    armed = false;
+    document.documentElement.classList.remove('armed');
+    hint.classList.add('hidden');
+    invoke('freeze_now').catch(() => {});
+  }
   if (textInput) { closeTextInput(true); return; }
   hint.classList.add('hidden');
   if (tool === 'eraser') { eraseAt(p); return; }
