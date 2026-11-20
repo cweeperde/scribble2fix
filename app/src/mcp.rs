@@ -405,6 +405,19 @@ the user a clarifying question instead of guessing.\n\
 If you can't view images (your model has no image support), tell the user right away that you can't \
 look at the scribble itself. Work only from the text here (the marks and labels below) and ask them \
 to describe what they marked.\n";
+    let hidden = meta["marks"]
+        .as_array()
+        .map_or(0, |m| m.iter().filter(|m| m["kind"] == "redact").count());
+    if hidden > 0 {
+        text += &format!(
+            "\nThe user deliberately hid {hidden} area{} of the screenshot before sending it (solid black, \
+labeled \"Hidden\", listed below as HIDDEN ON PURPOSE). The original pixels there were removed, so \
+nothing can be recovered from the images. This is intentional and private: don't try to read, \
+reconstruct or guess what was there, and don't look for that information anywhere else (code, files, \
+logs, settings, environment) unless the user asks you to. Work with the rest of the screenshot.\n",
+            if hidden == 1 { "" } else { "s" }
+        );
+    }
     if let Some(marks) = meta["marks"].as_array().filter(|m| !m.is_empty()) {
         text += "\nThe marks as data (pixels in image 1, origin top left):\n";
         for m in marks {
@@ -441,7 +454,11 @@ fn describe_mark(m: &Value) -> String {
         "marker" => format!("{meaning} marker #{} at {}", m["number"], pt(&m["at"])),
         kind => {
             let b = &m["box"];
-            let shape = if kind == "box" { "box" } else { "freehand mark" };
+            let shape = match kind {
+                "box" => "box",
+                "redact" => "area",
+                _ => "freehand mark",
+            };
             format!(
                 "{meaning} {shape} spanning ({}, {}) to ({}, {})",
                 b[0], b[1], b[2], b[3]

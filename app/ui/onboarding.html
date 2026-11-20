@@ -26,6 +26,23 @@
   .keys > :nth-child(odd) { white-space: nowrap; }
   .row.all { padding: 10px 12px; margin-bottom: 4px; border-radius: 10px; background: var(--field); }
   .row.all + .row { border-top: 0; }
+  /* Toolbar style cards: a small picture of each toolbar. */
+  .styles { display: grid; gap: 10px; margin: 4px 0 12px; }
+  .style {
+    all: unset; box-sizing: border-box; display: block; padding: 12px 14px; border-radius: 12px; cursor: pointer;
+    background: var(--field); border: 2px solid transparent; transition: border-color 0.15s, background-color 0.15s;
+  }
+  .style.on { border-color: var(--accent); }
+  .style b { display: block; margin-bottom: 2px; }
+  .style small { display: block; color: var(--muted); font-size: 12px; margin-bottom: 10px; }
+  .mini {
+    display: inline-flex; align-items: center; gap: 5px; padding: 6px 8px; border-radius: 10px;
+    background: #1e1e22; border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+  .mini i { width: 11px; height: 11px; border-radius: 50%; }
+  .mini span { width: 15px; height: 15px; border-radius: 4px; background: rgba(255, 255, 255, 0.16); }
+  .mini .sep { width: 1px; height: 14px; background: rgba(255, 255, 255, 0.14); border-radius: 0; }
+  .mini .ok { width: 30px; background: var(--accent); }
   footer { display: flex; align-items: center; gap: 10px; padding-top: 14px; }
   .dots { flex: 1; display: flex; gap: 6px; }
   .dots i { width: 7px; height: 7px; border-radius: 4px; background: var(--field); border: 1px solid var(--line); transition: width 0.3s cubic-bezier(0.2, 1.25, 0.35, 1), background-color 0.2s; }
@@ -57,12 +74,13 @@
     <span><kbd>N</kbd></span><span>Numbered marker</span>
     <span><kbd>A</kbd></span><span>Arrow</span>
     <span><kbd>E</kbd></span><span>Eraser</span>
+    <span><kbd>R</kbd></span><span>Hide private info</span>
     <span><kbd>Ctrl</kbd> <kbd>Z</kbd></span><span>Undo</span>
     <span><kbd>+</kbd> <kbd>−</kbd></span><span>Stroke size</span>
     <span><kbd>Esc</kbd></span><span>Cancel</span>
     <span><kbd>Enter</kbd></span><span>Copy</span>
   </div>
-  <p class="muted">Text, numbers, eraser and size are folded away behind the <b>›</b> button in the toolbar.</p>
+  <p class="muted">Text, numbers, hiding, eraser and size are folded away behind the <b>›</b> button in the toolbar.</p>
 </div>
 
 <div class="step">
@@ -70,11 +88,32 @@
   <p>Press it anywhere to start a scribble. Click the box to pick a different one.</p>
   <button class="hotkey" id="hotkey"></button>
   <div class="status" id="hotkey-status"></div>
+  <p class="muted" id="mac-fn" hidden>On a MacBook keyboard press <kbd>fn</kbd> <kbd>F6</kbd>, or turn on "Use F1, F2, etc. keys as standard function keys" in System Settings → Keyboard.</p>
   <div class="row">
     <div class="label">Start Scribble2Fix at login<small>It waits in the system tray, so your hotkey always works.</small></div>
     <label class="switch"><input type="checkbox" id="autostart" checked><span></span></label>
   </div>
+  <div class="row">
+    <div class="label">Pause the hotkey in fullscreen apps<small>Games and fullscreen videos keep the key while they're in front.</small></div>
+    <label class="switch"><input type="checkbox" id="fullscreen"><span></span></label>
+  </div>
   <p class="muted">You can change all of this later: tray icon → Settings.</p>
+</div>
+<div class="step">
+  <h1>Your toolbar</h1>
+  <p>Pick how much you want to see while you draw. You can switch any time in Settings.</p>
+  <div class="styles">
+    <button class="style" data-simple="false">
+      <b>Full</b>
+      <small>Colors, freehand, box, arrow, text labels, numbered markers, redact, eraser and stroke size.</small>
+      <span class="mini"><i style="background:var(--add)"></i><i style="background:var(--remove)"></i><i style="background:var(--change)"></i><span class="sep"></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span class="sep"></span><span></span><span></span><span class="sep"></span><span class="ok"></span></span>
+    </button>
+    <button class="style" data-simple="true">
+      <b>Simple</b>
+      <small>Just the colors, freehand, box and arrow.</small>
+      <span class="mini"><i style="background:var(--add)"></i><i style="background:var(--remove)"></i><i style="background:var(--change)"></i><span class="sep"></span><span></span><span></span><span></span><span class="sep"></span><span class="ok"></span></span>
+    </button>
+  </div>
 </div>
 
 <div class="step">
@@ -89,7 +128,7 @@
 </div>
 
 <footer>
-  <div class="dots"><i class="on"></i><i></i><i></i></div>
+  <div class="dots"><i class="on"></i><i></i><i></i><i></i></div>
   <button class="btn" id="back" style="visibility:hidden">Back</button>
   <button class="btn primary" id="next">Next</button>
 </footer>
@@ -165,10 +204,28 @@ async function finish() {
 $('back').onclick = () => show(step - 1);
 $('next').onclick = () => (step < steps.length - 1 ? show(step + 1) : finish());
 
+// The F keys need fn on MacBook keyboards.
+const showMacHint = () => { $('mac-fn').hidden = !(isMac && /^F\d+$/.test(hotkey)); };
+
+$('fullscreen').onchange = (e) => invoke('set_pause_in_fullscreen', { on: e.target.checked });
+function pickStyle(simple) {
+  for (const b of document.querySelectorAll('.style')) b.classList.toggle('on', (b.dataset.simple === 'true') === simple);
+}
+for (const b of document.querySelectorAll('.style')) {
+  b.onclick = () => {
+    const simple = b.dataset.simple === 'true';
+    pickStyle(simple);
+    invoke('set_simple_toolbar', { on: simple });
+  };
+}
+
 invoke('get_settings').then((s) => {
   hotkey = s.hotkey;
   tools = s.tools;
-  hotkeyRecorder($('hotkey'), $('hotkey-status'), s.hotkey, (h) => { hotkey = h; });
+  $('fullscreen').checked = s.pauseInFullscreen;
+  pickStyle(!!s.simpleToolbar);
+  showMacHint();
+  hotkeyRecorder($('hotkey'), $('hotkey-status'), s.hotkey, (h) => { hotkey = h; showMacHint(); });
   renderTools();
   show(0);
 });

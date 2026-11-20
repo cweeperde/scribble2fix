@@ -5,60 +5,87 @@
 <title>Scribble2Fix Settings</title>
 <link rel="stylesheet" href="common.css">
 <style>
-  body { padding: 20px 24px 24px; }
-  section { margin-bottom: 22px; }
-  header { display: flex; align-items: baseline; gap: 8px; margin-bottom: 18px; }
+  body { padding: 18px 24px 24px; }
+  header { display: flex; align-items: baseline; gap: 8px; margin-bottom: 14px; }
   header .muted { font-size: 12px; }
+
+  /* Tabs: a small segmented control; one page shows at a time. */
+  nav { display: flex; gap: 2px; padding: 3px; margin-bottom: 18px; border-radius: 10px; background: var(--field); border: 1px solid var(--line); }
+  nav button {
+    all: unset; flex: 1; text-align: center; padding: 6px 0; border-radius: 7px; cursor: pointer;
+    font-size: 13px; font-weight: 550; color: var(--muted); transition: background-color 0.15s, color 0.15s;
+  }
+  nav button:hover { color: var(--text); }
+  nav button.on { background: var(--bg); color: var(--text); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12); }
+  .page { display: none; }
+  .page.on { display: block; animation: page-in 0.25s cubic-bezier(0.2, 0.8, 0.2, 1); }
+  @keyframes page-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+  @media (prefers-reduced-motion: reduce) { .page.on { animation: none; } }
+
+  .page > h2:not(:first-child) { margin-top: 20px; }
   details summary { cursor: pointer; color: var(--accent); font-size: 13px; margin-top: 8px; }
   .deps { margin: 8px 0 0; padding: 0; list-style: none; font-size: 12px; color: var(--muted); }
-  .deps li { display: flex; justify-content: space-between; padding: 2px 0; }
+  .deps li { display: flex; justify-content: space-between; gap: 12px; padding: 2px 0; }
   .links { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13px; margin-top: 6px; }
+  .actions { display: flex; align-items: center; gap: 12px; margin-top: 10px; }
+  .actions .status { margin: 0; }
 </style>
 </head>
 <body>
 <header><h1>Scribble2Fix</h1><span class="muted" id="version"></span></header>
 
-<section>
-  <h2>Capture</h2>
+<nav>
+  <button data-page="general" class="on">General</button>
+  <button data-page="ai">AI tools</button>
+  <button data-page="captures">Captures</button>
+  <button data-page="about">About</button>
+</nav>
+
+<div class="page on" id="general">
+  <h2>Hotkey</h2>
   <p class="muted">Click the box, then press the key or key combination you want to use.</p>
   <button class="hotkey" id="hotkey"></button>
   <div class="status" id="hotkey-status"></div>
-  <div class="row" id="monitor-row">
-    <div class="label">Monitor<small>Which screen freezes when you press the hotkey.</small></div>
-    <select id="monitor"></select>
-  </div>
   <div class="row">
-    <div class="label">Start at login</div>
+    <div class="label">Start at login<small>Waits in the tray, so the hotkey always works.</small></div>
     <label class="switch"><input type="checkbox" id="autostart"><span></span></label>
-  </div>
-  <div class="row">
-    <div class="label">Simple toolbar<small>Only the colors, freehand, box and arrow. Hides text labels, markers, eraser and stroke size.</small></div>
-    <label class="switch"><input type="checkbox" id="simple"><span></span></label>
   </div>
   <div class="row">
     <div class="label">Pause hotkey in fullscreen apps<small>While a game or fullscreen video is in front, the hotkey goes back to that app.</small></div>
     <label class="switch"><input type="checkbox" id="fullscreen"><span></span></label>
   </div>
-  <div class="row">
-    <div class="label">Freeze when I start drawing<small>The screen stays live after the hotkey, so you can still switch windows, desktops or monitors. Your first click freezes the monitor you click on.</small></div>
-    <label class="switch"><input type="checkbox" id="freeze-on-draw"><span></span></label>
+  <div class="row" id="monitor-row">
+    <div class="label">Monitor<small>Which screen freezes when you press the hotkey.</small></div>
+    <select id="monitor"></select>
   </div>
-</section>
+  <div class="row">
+    <div class="label">Install updates automatically<small>Checks GitHub at startup.</small></div>
+    <label class="switch"><input type="checkbox" id="auto-update"><span></span></label>
+  </div>
+  <div class="actions">
+    <button class="btn" id="check">Check for updates</button>
+    <div class="status" id="update-status"></div>
+  </div>
+</div>
 
-<section>
-  <h2>AI tools</h2>
-  <p class="muted">Connecting sets up everything the tool needs: the <code>scribble2fix</code> MCP server, a <code>/scribble</code> command where the tool has commands, and permission to use it without asking each time. The AI can then read your captures and ask you for a scribble (it always asks in the chat first).</p>
+<div class="page" id="ai">
+  <p class="muted">Connecting sets up the MCP server, a <code>/scribble</code> command and the permissions. The AI can then read your scribbles and ask you for one (always in the chat first).</p>
   <div id="tools"></div>
   <div class="status" id="tools-status"></div>
-  <div class="links"><a data-link="manual">Using another AI tool? Connect it by hand</a></div>
   <div class="row">
     <div class="label">Sound when an AI asks for a scribble<small>A short chime with the request card at the top of the screen.</small></div>
     <label class="switch"><input type="checkbox" id="request-sound"><span></span></label>
   </div>
-</section>
+  <div class="links"><a data-link="manual">Using another AI tool? Connect it by hand</a></div>
+</div>
 
-<section>
-  <h2>Captures &amp; privacy</h2>
+<div class="page" id="captures">
+  <h2>Drawing</h2>
+  <div class="row">
+    <div class="label">Simple toolbar<small>Only the colors, freehand, box and arrow. Hides text labels, markers, redact, eraser and stroke size.</small></div>
+    <label class="switch"><input type="checkbox" id="simple"><span></span></label>
+  </div>
+  <h2>Saved captures</h2>
   <div class="row">
     <div class="label">Keep the last captures<small>Older ones are deleted automatically.</small></div>
     <input type="number" id="keep" min="1">
@@ -72,25 +99,14 @@
     <label class="switch"><input type="checkbox" id="copy-path"><span></span></label>
   </div>
   <div class="links"><a id="open-captures">Open captures folder</a></div>
-</section>
+</div>
 
-<section>
-  <h2>Updates</h2>
-  <div class="row">
-    <div class="label">Install updates automatically<small>Checks GitHub at startup.</small></div>
-    <label class="switch"><input type="checkbox" id="auto-update"><span></span></label>
-  </div>
-  <button class="btn" id="check">Check for updates</button>
-  <div class="status" id="update-status"></div>
-</section>
-
-<section>
-  <h2>About</h2>
+<div class="page" id="about">
   <p>Made by <a data-link="author">cweeper</a> and <a data-link="keinplan0">KeinPlan0</a>. Free for personal, noncommercial use under the <a data-link="license">PolyForm Strict License</a>.</p>
   <div class="links">
+    <a id="welcome">Run setup again</a>
     <a data-link="repo">Source code on GitHub</a>
     <a data-link="issues">Report a problem</a>
-    <a id="welcome">Show welcome again</a>
   </div>
   <details>
     <summary>Open-source components</summary>
@@ -102,17 +118,31 @@
       <li><span>image, base64, chrono, dirs</span><span>MIT / Apache-2.0</span></li>
       <li><span>serde, serde_json</span><span>MIT / Apache-2.0</span></li>
       <li><span>jsonc-parser</span><span>MIT</span></li>
+      <li><span>windows, windows-sys</span><span>MIT / Apache-2.0</span></li>
+      <li><span>objc2 and its framework crates, block2</span><span>MIT</span></li>
+      <li><span>gtk-rs</span><span>MIT</span></li>
       <li><span>App icons: Simple Icons (logos are trademarks of their owners)</span><span>CC0</span></li>
-      <li><span>windows-sys</span><span>MIT / Apache-2.0</span></li>
     </ul>
   </details>
-</section>
+</div>
 
 <script src="guard.js"></script>
 <script src="tool-icons.js"></script>
 <script src="common.js"></script>
 <script>
 const $ = (id) => document.getElementById(id);
+
+// Tabs; the last one used opens again next time.
+const store = { get: (k) => { try { return localStorage.getItem(k); } catch { return null; } },
+                set: (k, v) => { try { localStorage.setItem(k, v); } catch {} } };
+function showPage(id) {
+  if (!$(id)) id = 'general';
+  for (const b of document.querySelectorAll('nav button')) b.classList.toggle('on', b.dataset.page === id);
+  for (const p of document.querySelectorAll('.page')) p.classList.toggle('on', p.id === id);
+  store.set('settings-page', id);
+}
+for (const b of document.querySelectorAll('nav button')) b.onclick = () => showPage(b.dataset.page);
+showPage(store.get('settings-page') || 'general');
 
 async function load() {
   const s = await invoke('get_settings');
@@ -126,7 +156,6 @@ async function load() {
   $('copy-path').checked = s.copyPath;
   $('simple').checked = s.simpleToolbar;
   $('fullscreen').checked = s.pauseInFullscreen;
-  $('freeze-on-draw').checked = s.freezeOnDraw;
   $('auto-update').checked = s.autoUpdate;
   $('request-sound').checked = s.requestSound;
   renderMonitors(s.monitors, s.captureMonitor);
@@ -181,7 +210,6 @@ $('never-save').onchange = async (e) => {
 $('copy-path').onchange = (e) => invoke('set_copy_path', { on: e.target.checked });
 $('simple').onchange = (e) => invoke('set_simple_toolbar', { on: e.target.checked });
 $('fullscreen').onchange = (e) => invoke('set_pause_in_fullscreen', { on: e.target.checked });
-$('freeze-on-draw').onchange = (e) => invoke('set_freeze_on_draw', { on: e.target.checked });
 $('auto-update').onchange = (e) => invoke('set_auto_update', { on: e.target.checked });
 $('request-sound').onchange = (e) => invoke('set_request_sound', { on: e.target.checked });
 $('monitor').onchange = (e) => invoke('set_capture_monitor', { id: e.target.value });

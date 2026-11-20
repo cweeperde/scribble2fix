@@ -53,9 +53,6 @@ struct Source {
 struct AppState {
     /// True while the overlay is up (or being prepared). Ignores repeated hotkeys.
     active: AtomicBool,
-    /// True while the overlay waits for the first click: the screen is still
-    /// live, and the hotkey toggles back to cancel.
-    armed: AtomicBool,
     /// Raw RGBA of the frozen screen, handed to the overlay once.
     pixels: Mutex<Option<Vec<u8>>>,
     source: Mutex<Source>,
@@ -74,6 +71,8 @@ struct AppState {
     windows: Mutex<Vec<ScreenWindow>>,
     /// Bumped with every freeze, so an older desktop watcher stops.
     freeze_generation: AtomicU64,
+    /// The desktop that's frozen (`desktop_marker`).
+    frozen_desktop: Mutex<Option<DesktopMarker>>,
 }
 
 /// A window on screen, in physical pixels like `Area`.
@@ -177,7 +176,7 @@ mod macos {
     use std::ffi::c_void;
     use objc2_app_kit::{
         NSApplicationActivationOptions, NSPopUpMenuWindowLevel, NSRunningApplication, NSScreen,
-        NSWindow, NSWindowCollectionBehavior,
+        NSWindow, NSWindowAnimationBehavior, NSWindowCollectionBehavior,
     };
     use block2::RcBlock;
     use objc2_app_kit::{NSWorkspace, NSWorkspaceActiveSpaceDidChangeNotification};
@@ -246,6 +245,22 @@ mod macos {
                     | NSWindowCollectionBehavior::IgnoresCycle,
             )
         });
+    }
+
+    /// Bundle id of the app in front.
+    pub fn front_app_id() -> Option<String> {
+        NSWorkspace::sharedWorkspace()
+            .frontmostApplication()?
+            .bundleIdentifier()
+            .map(|id| id.to_string())
+    }
+
+    pub fn set_alpha(window: &WebviewWindow, alpha: f64) {
+        with_ns_window(window, move |w| w.setAlphaValue(alpha));
+    }
+
+    pub fn no_animations(window: &WebviewWindow) {
+        with_ns_window(window, |w| w.setAnimationBehavior(NSWindowAnimationBehavior::None));
     }
 
     /// "Always on top" windows still stay below the menu bar and the Dock.
@@ -391,17 +406,9 @@ mod macos {
 // ---------------------------------------------------------------- capture
 
 fn start_capture(app: &AppHandle) {
-    let state = app.state::<AppState>();
-    // Pressed again while armed: cancel instead of freezing.
-    if state.armed.swap(false, Ordering::SeqCst) {
-        do_cancel(app);
+    if app.state::<AppState>().active.swap(true, Ordering::SeqCst) {
         return;
     }
-    if state.active.swap(true, Ordering::SeqCst) {
-        return;
-    }
-    let on_draw = config(app).freeze_on_draw;
-    state.armed.store(on_draw, Ordering::SeqCst);
     if !macos::check_screen_access() {
         show_toast(
             app,
@@ -413,15 +420,10 @@ fn start_capture(app: &AppHandle) {
     }
     let app = app.clone();
     thread::spawn(move || {
-        let result = if on_draw {
-            arm(&app)
-        } else {
-            prepare(&app, target_monitor(&app)).and_then(|_| capture(&app, "capture"))
-        };
-        if let Err(e) = result {
-            let state = app.state::<AppState>();
-            state.armed.store(false, Ordering::SeqCst);
-            state.active.store(false, Ordering::SeqCst);
+        if let Err(e) = prepare(&app, target_monitor(&app)).and_then(|_| capture(&app)) {
+            app.state::<AppState>()
+                .active
+                .store(false, Ordering::SeqCst);
             show_toast(&app, &format!("Capture failed: {e}"));
         }
     });
@@ -468,86 +470,6 @@ fn set_area(app: &AppHandle, monitor: &tauri::Monitor) -> Area {
     area
 }
 
-/// "Freeze when I start drawing": shows the (transparent) overlay over the
-/// live screen without freezing anything. It moves along to the monitor
-/// under the mouse, and the first click freezes that one (`freeze_now`), so
-/// the user can still switch windows, desktops or monitors after the hotkey.
-/// Keyboard focus stays where it is.
-fn arm(app: &AppHandle) -> Result<(), String> {
-    let monitor = cursor_monitor(app).or_else(|| app.primary_monitor().ok().flatten());
-    let area = prepare(app, monitor)?;
-    show_armed(app, area)?;
-    let app = app.clone();
-    thread::spawn(move || loop {
-        thread::sleep(Duration::from_millis(120));
-        let state = app.state::<AppState>();
-        // `freeze_now` takes the same lock, so the overlay can't move to
-        // another monitor while the screen is being frozen.
-        let area = state.area.lock().unwrap();
-        if !state.armed.load(Ordering::SeqCst) {
-            return;
-        }
-        let Some(m) = cursor_monitor(&app) else { continue };
-        if area.is_some_and(|a| a.x == m.position().x && a.y == m.position().y) {
-            continue;
-        }
-        drop(area);
-        let moved = set_area(&app, &m);
-        let _ = show_armed(&app, moved);
-    });
-    Ok(())
-}
-
-/// Puts the armed overlay over `area` and tells the page about it.
-fn show_armed(app: &AppHandle, area: Area) -> Result<(), String> {
-    // Cancelled (hotkey pressed again) in the meantime: show nothing.
-    if !app.state::<AppState>().armed.load(Ordering::SeqCst) {
-        return Ok(());
-    }
-    let overlay = app.get_webview_window("overlay").ok_or("overlay missing")?;
-    overlay
-        .set_position(PhysicalPosition::new(area.x, area.y))
-        .map_err(err)?;
-    overlay
-        .set_size(PhysicalSize::new(area.width, area.height))
-        .map_err(err)?;
-
-    #[derive(Serialize, Clone)]
-    #[serde(rename_all = "camelCase")]
-    struct ArmPayload {
-        /// Monitor size in physical px (the overlay covers it).
-        width: u32,
-        height: u32,
-        /// Shown at the top while an AI tool waits for this scribble.
-        request: Option<RequestInfo>,
-        /// Only the basic tools in the toolbar.
-        simple: bool,
-        /// Pretty hotkey, shown as "press again to cancel".
-        cancel_key: String,
-        /// The camera notch (macOS), which the toolbar and frame avoid.
-        top: ScreenTop,
-    }
-    let config = config(app);
-    overlay
-        .emit(
-            "arm",
-            ArmPayload {
-                width: area.width,
-                height: area.height,
-                request: storage::read_request()
-                    .map(|r| RequestInfo { client: r.client, reason: r.reason }),
-                simple: config.simple_toolbar,
-                cancel_key: pretty_hotkey(&config.hotkey),
-                top: macos::screen_top(
-                    app,
-                    area.x as f64 / area.scale,
-                    area.width as f64 / area.scale,
-                ),
-            },
-        )
-        .map_err(err)
-}
-
 /// The monitor under the mouse.
 fn cursor_monitor(app: &AppHandle) -> Option<tauri::Monitor> {
     let cursor = app.cursor_position().ok()?;
@@ -572,10 +494,8 @@ fn target_monitor(app: &AppHandle) -> Option<tauri::Monitor> {
 }
 
 /// Freezes the chosen monitor (`set_area`) and hands the screenshot to the
-/// overlay: as `capture` to the hidden overlay, which shows itself once it's
-/// painted, or as `frozen` to the armed one, which paints it over the live
-/// screen.
-fn capture(app: &AppHandle, event: &str) -> Result<(), String> {
+/// (hidden, pre-warmed) overlay, which shows itself once it's painted.
+fn capture(app: &AppHandle) -> Result<(), String> {
     let state = app.state::<AppState>();
     let unix_ms = chrono::Utc::now().timestamp_millis();
     let area = (*state.area.lock().unwrap()).ok_or("no capture area")?;
@@ -617,18 +537,9 @@ fn capture(app: &AppHandle, event: &str) -> Result<(), String> {
         request: Option<RequestInfo>,
         /// Only the basic tools in the toolbar.
         simple: bool,
-        /// Mouse position on the captured monitor (physical px), where the
-        /// intro animation starts; the center if the mouse is elsewhere.
-        cursor: (f64, f64),
         /// The camera notch (macOS), which the toolbar and frame avoid.
         top: ScreenTop,
     }
-    let cursor = app
-        .cursor_position()
-        .ok()
-        .map(|c| (c.x - area.x as f64, c.y - area.y as f64))
-        .filter(|&(x, y)| x >= 0.0 && y >= 0.0 && x < width as f64 && y < height as f64)
-        .unwrap_or((width as f64 / 2.0, height as f64 / 2.0));
     let request = storage::read_request().map(|r| RequestInfo {
         client: r.client,
         reason: r.reason,
@@ -637,13 +548,12 @@ fn capture(app: &AppHandle, event: &str) -> Result<(), String> {
     let marker = desktop_marker();
     overlay
         .emit(
-            event,
+            "capture",
             Payload {
                 width,
                 height,
                 request,
                 simple: config(app).simple_toolbar,
-                cursor,
                 top: macos::screen_top(app, area.x as f64 / area.scale, area.width as f64 / area.scale),
             },
         )
@@ -661,6 +571,7 @@ fn capture(app: &AppHandle, event: &str) -> Result<(), String> {
 fn watch_desktop(app: &AppHandle, marker: Option<DesktopMarker>) {
     let state = app.state::<AppState>();
     let generation = state.freeze_generation.fetch_add(1, Ordering::SeqCst) + 1;
+    *state.frozen_desktop.lock().unwrap() = marker.clone();
     let Some(marker) = marker else { return };
     let app = app.clone();
     thread::spawn(move || loop {
@@ -685,6 +596,7 @@ fn watch_desktop(app: &AppHandle, marker: Option<DesktopMarker>) {
 /// also when the desktop has no windows. If that's missing, a window of the
 /// desktop stands in for it.
 #[cfg(windows)]
+#[derive(Clone)]
 struct DesktopMarker {
     desktop: Option<Vec<u8>>,
     window: Option<isize>,
@@ -842,8 +754,12 @@ fn frozen_pixels(state: State<AppState>) -> Result<tauri::ipc::Response, String>
         .ok_or_else(|| "no capture pending".into())
 }
 
+/// Shows the overlay and gives it the focus, but keeps it see-through until
+/// the page has drawn the frozen screen (`reveal_overlay`): a window that was
+/// hidden comes up blank for a frame or two, which flashes black.
 #[tauri::command]
 fn show_overlay(window: WebviewWindow) -> Result<(), String> {
+    set_window_shown(&window, false);
     move_to_current_desktop(&window);
     // Linux: shown on all workspaces for a moment and then pinned again, so
     // the window manager puts it on the current one instead of switching
@@ -867,68 +783,37 @@ fn show_overlay(window: WebviewWindow) -> Result<(), String> {
     window.set_focus().map_err(err)
 }
 
-/// Shows the armed overlay without taking keyboard focus, so the user can
-/// keep typing and switch windows or desktops while it waits for a click.
-#[tauri::command]
-fn show_overlay_armed(window: WebviewWindow) -> Result<(), String> {
-    // The capture was cancelled while arming: show nothing.
-    if !window
-        .app_handle()
-        .state::<AppState>()
-        .active
-        .load(Ordering::SeqCst)
-    {
-        return Ok(());
-    }
-    if cfg!(target_os = "macos") {
-        macos::above_menu_bar(&window);
-    } else {
-        // hide_overlay_window dropped "always on top"; take it back.
-        window.set_always_on_top(true).map_err(err)?;
-    }
-    set_visible_no_activate(&window, true);
-    Ok(())
-}
-
-/// The user started drawing on the armed overlay: freeze the screen now.
-#[tauri::command]
-async fn freeze_now(app: AppHandle) -> Result<(), String> {
-    {
-        // The area lock keeps the overlay from following the mouse to
-        // another monitor right now (see `arm`).
-        let state = app.state::<AppState>();
-        let _area = state.area.lock().unwrap();
-        if !state.armed.swap(false, Ordering::SeqCst) {
-            return Err("not armed".into());
-        }
-    }
-    let handle = app.clone();
-    let result: Result<(), String> =
-        tauri::async_runtime::spawn_blocking(move || capture(&handle, "frozen"))
-        .await
-        .unwrap_or_else(|e| Err(err(e)));
-    let Err(e) = result else {
-        return Ok(());
-    };
-    // Nothing is frozen; back out cleanly so a new capture can start.
-    app.state::<AppState>()
-        .active
-        .store(false, Ordering::SeqCst);
-    if let Some(window) = app.get_webview_window("overlay") {
-        let _ = hide_overlay_window(&window);
-    }
-    show_toast(&app, &format!("Capture failed: {e}"));
-    Err(e)
-}
-
 /// The user left the frozen screen before drawing anything: switched to
 /// another desktop (Space), app or monitor. Freeze what they look at now
 /// instead of keeping the old picture up.
+///
+/// `desktop`: the desktop watcher saw a switch. Otherwise it's a lost focus,
+/// which can also be a screenshot tool (Win+Shift+S, Cmd+Shift+4) taking the
+/// focus to capture the frozen screen with its marks: then it stays up and
+/// this returns false.
 #[tauri::command]
-async fn refreeze(app: AppHandle, window: WebviewWindow) -> Result<(), String> {
+async fn refreeze(app: AppHandle, window: WebviewWindow, desktop: bool) -> Result<bool, String> {
     let state = app.state::<AppState>();
-    if !state.active.load(Ordering::SeqCst) || state.armed.load(Ordering::SeqCst) {
-        return Ok(());
+    if !state.active.load(Ordering::SeqCst) {
+        return Ok(false);
+    }
+    let desktop = desktop
+        || state
+            .frozen_desktop
+            .lock()
+            .unwrap()
+            .as_ref()
+            .is_some_and(desktop_left);
+    if !desktop {
+        let tool = tauri::async_runtime::spawn_blocking(|| {
+            thread::sleep(Duration::from_millis(150));
+            screenshot_tool_in_front()
+        })
+        .await
+        .unwrap_or(false);
+        if tool {
+            return Ok(false);
+        }
     }
     // Out of the way, so the new screen gets captured. Without handing the
     // focus back: on macOS that would switch back to the old Space.
@@ -938,7 +823,7 @@ async fn refreeze(app: AppHandle, window: WebviewWindow) -> Result<(), String> {
     let result = tauri::async_runtime::spawn_blocking(move || {
         // Let the desktop switch animation finish.
         thread::sleep(Duration::from_millis(450));
-        prepare(&handle, target_monitor(&handle)).and_then(|_| capture(&handle, "capture"))
+        prepare(&handle, target_monitor(&handle)).and_then(|_| capture(&handle))
     })
     .await
     .unwrap_or_else(|e| Err(err(e)));
@@ -949,8 +834,124 @@ async fn refreeze(app: AppHandle, window: WebviewWindow) -> Result<(), String> {
         show_toast(&app, &format!("Capture failed: {e}"));
         return Err(e);
     }
-    Ok(())
+    Ok(true)
 }
+
+/// Windows: another app's window in front that covers the whole monitor and
+/// stays on top of everything, like the layer of the Snipping Tool, ShareX
+/// or Greenshot. The taskbar or a normal window isn't that.
+#[cfg(windows)]
+fn screenshot_tool_in_front() -> bool {
+    use windows_sys::Win32::Foundation::RECT;
+    use windows_sys::Win32::Graphics::Gdi::{
+        GetMonitorInfoW, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTONEAREST,
+    };
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        GetForegroundWindow, GetWindowLongW, GetWindowRect, GetWindowThreadProcessId, GWL_EXSTYLE,
+        WS_EX_TOPMOST,
+    };
+    unsafe {
+        let front = GetForegroundWindow();
+        if front.is_null() {
+            return false;
+        }
+        let mut pid = 0u32;
+        GetWindowThreadProcessId(front, &mut pid);
+        if pid == std::process::id() || GetWindowLongW(front, GWL_EXSTYLE) as u32 & WS_EX_TOPMOST == 0 {
+            return false;
+        }
+        let mut window: RECT = std::mem::zeroed();
+        let mut monitor: MONITORINFO = std::mem::zeroed();
+        monitor.cbSize = std::mem::size_of::<MONITORINFO>() as u32;
+        GetWindowRect(front, &mut window) != 0
+            && GetMonitorInfoW(MonitorFromWindow(front, MONITOR_DEFAULTTONEAREST), &mut monitor) != 0
+            && window.left <= monitor.rcMonitor.left
+            && window.top <= monitor.rcMonitor.top
+            && window.right >= monitor.rcMonitor.right
+            && window.bottom >= monitor.rcMonitor.bottom
+    }
+}
+
+/// macOS: its screenshot tool (Cmd+Shift+3/4/5).
+#[cfg(target_os = "macos")]
+fn screenshot_tool_in_front() -> bool {
+    macos::front_app_id().is_some_and(|id| {
+        id == "com.apple.screencaptureui" || id == "com.apple.Screenshot"
+    })
+}
+
+#[cfg(target_os = "linux")]
+fn screenshot_tool_in_front() -> bool {
+    false
+}
+
+#[tauri::command]
+fn reveal_overlay(window: WebviewWindow) {
+    set_window_shown(&window, true);
+}
+
+/// Windows: cloaks the window (shown for the system, not drawn on screen).
+/// macOS and Linux: fully transparent.
+#[cfg(windows)]
+fn set_window_shown(window: &WebviewWindow, shown: bool) {
+    use windows::core::BOOL;
+    use windows::Win32::Foundation::HWND;
+    use windows::Win32::Graphics::Dwm::{DwmSetWindowAttribute, DWMWA_CLOAK};
+    let Ok(hwnd) = window.hwnd() else { return };
+    let cloak = BOOL(!shown as i32);
+    let _ = unsafe {
+        DwmSetWindowAttribute(
+            HWND(hwnd.0 as _),
+            DWMWA_CLOAK,
+            &cloak as *const BOOL as *const _,
+            std::mem::size_of::<BOOL>() as u32,
+        )
+    };
+}
+
+#[cfg(target_os = "macos")]
+fn set_window_shown(window: &WebviewWindow, shown: bool) {
+    macos::set_alpha(window, if shown { 1.0 } else { 0.0 });
+}
+
+#[cfg(target_os = "linux")]
+fn set_window_shown(window: &WebviewWindow, shown: bool) {
+    use gtk::prelude::WidgetExt;
+    let handle = window.clone();
+    let _ = window.run_on_main_thread(move || {
+        if let Ok(gtk) = handle.gtk_window() {
+            gtk.set_opacity(if shown { 1.0 } else { 0.0 });
+        }
+    });
+}
+
+/// The system's own fade and zoom when a window shows or hides: over a frozen
+/// screen it reads as a glitch (the picture shifts against the real screen),
+/// and the pages animate themselves anyway.
+#[cfg(windows)]
+fn no_window_animations(window: &WebviewWindow) {
+    use windows::core::BOOL;
+    use windows::Win32::Foundation::HWND;
+    use windows::Win32::Graphics::Dwm::{DwmSetWindowAttribute, DWMWA_TRANSITIONS_FORCEDISABLED};
+    let Ok(hwnd) = window.hwnd() else { return };
+    let off = BOOL(1);
+    let _ = unsafe {
+        DwmSetWindowAttribute(
+            HWND(hwnd.0 as _),
+            DWMWA_TRANSITIONS_FORCEDISABLED,
+            &off as *const BOOL as *const _,
+            std::mem::size_of::<BOOL>() as u32,
+        )
+    };
+}
+
+#[cfg(target_os = "macos")]
+fn no_window_animations(window: &WebviewWindow) {
+    macos::no_animations(window);
+}
+
+#[cfg(target_os = "linux")]
+fn no_window_animations(_window: &WebviewWindow) {}
 
 #[tauri::command]
 fn hide_overlay(window: WebviewWindow) -> Result<(), String> {
@@ -1009,9 +1010,9 @@ fn refresh_taskbars() {}
 /// stays open, so the user can simply press the hotkey again.
 #[tauri::command]
 fn overlay_loaded(app: AppHandle, window: WebviewWindow) -> Result<(), String> {
-    let state = app.state::<AppState>();
-    state.armed.store(false, Ordering::SeqCst);
-    state.active.store(false, Ordering::SeqCst);
+    app.state::<AppState>()
+        .active
+        .store(false, Ordering::SeqCst);
     window.hide().map_err(err)
 }
 
@@ -1021,12 +1022,12 @@ fn cancel_capture(app: AppHandle, _window: WebviewWindow) -> Result<(), String> 
     Ok(())
 }
 
-/// Backs out of a capture, armed or frozen: hides the overlay, tells a
-/// waiting AI tool the user cancelled and hands the focus back.
+/// Backs out of a capture: hides the overlay, tells a waiting AI tool the
+/// user cancelled and hands the focus back.
 fn do_cancel(app: &AppHandle) {
-    let state = app.state::<AppState>();
-    state.armed.store(false, Ordering::SeqCst);
-    state.active.store(false, Ordering::SeqCst);
+    app.state::<AppState>()
+        .active
+        .store(false, Ordering::SeqCst);
     if let Some(request) = storage::answer_request(None) {
         show_toast(app, &format!("Cancelled. {} was told", request.client));
     }
@@ -1426,7 +1427,6 @@ struct Settings {
     pause_in_fullscreen: bool,
     request_sound: bool,
     capture_monitor: String,
-    freeze_on_draw: bool,
     monitors: Vec<MonitorChoice>,
     version: &'static str,
     tools: Vec<integrations::ToolStatus>,
@@ -1479,7 +1479,6 @@ fn get_settings(app: AppHandle) -> Settings {
         pause_in_fullscreen: config.pause_in_fullscreen,
         request_sound: config.request_sound,
         capture_monitor: config.capture_monitor.clone(),
-        freeze_on_draw: config.freeze_on_draw,
         monitors: monitor_choices(&app),
         version: env!("CARGO_PKG_VERSION"),
         tools: integrations::status(&config),
@@ -1567,12 +1566,6 @@ fn set_capture_monitor(app: AppHandle, id: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn set_freeze_on_draw(app: AppHandle, on: bool) -> Result<(), String> {
-    update_config(&app, |c| c.freeze_on_draw = on)?;
-    Ok(())
-}
-
-#[tauri::command]
 fn set_auto_update(app: AppHandle, on: bool) -> Result<(), String> {
     update_config(&app, |c| c.auto_update = on)?;
     Ok(())
@@ -1606,7 +1599,7 @@ fn close_window(window: WebviewWindow) -> Result<(), String> {
     window.close().map_err(err)
 }
 
-/// Settings → "Show welcome again". Async: a sync command runs on the main
+/// Settings → "Run setup again". Async: a sync command runs on the main
 /// thread, and creating a window there deadlocks on Windows.
 #[tauri::command]
 async fn show_onboarding(app: AppHandle, window: WebviewWindow) -> Result<(), String> {
@@ -1668,7 +1661,7 @@ fn open_window(app: &AppHandle, label: &str, title: &str, width: f64, height: f6
             if label == "onboarding" {
                 let _ = update_config(&app, |c| c.onboarded = true);
             }
-            // Settings → "Show welcome again" swaps one window for the other;
+            // Settings → "Run setup again" swaps one window for the other;
             // the hotkey stays off until both are closed.
             let other = if label == "settings" {
                 "onboarding"
@@ -1693,7 +1686,7 @@ fn open_window(app: &AppHandle, label: &str, title: &str, width: f64, height: f6
 }
 
 fn open_settings(app: &AppHandle) {
-    open_window(app, "settings", "Scribble2Fix Settings", 460.0, 660.0);
+    open_window(app, "settings", "Scribble2Fix Settings", 460.0, 700.0);
 }
 
 fn open_onboarding(app: &AppHandle) {
@@ -1804,11 +1797,6 @@ async fn update_now(app: AppHandle) -> Result<String, String> {
 
 fn create_windows(app: &AppHandle) -> tauri::Result<()> {
     // Pre-warmed: created hidden at startup so the hotkey only has to show it.
-    // Transparent: while armed the screen behind is still live, only the
-    // frozen screenshot is painted over it once the user starts drawing.
-    // Accepts the first mouse click: while armed the window isn't focused,
-    // and the click that starts the drawing must freeze the screen, not just
-    // activate the window.
     WebviewWindowBuilder::new(app, "overlay", WebviewUrl::App("overlay.html".into()))
         .title("Scribble2Fix")
         .visible(false)
@@ -1817,8 +1805,6 @@ fn create_windows(app: &AppHandle) -> tauri::Result<()> {
         .shadow(false)
         .skip_taskbar(true)
         .always_on_top(true)
-        .transparent(true)
-        .accept_first_mouse(true)
         .build()?;
 
     let toast = WebviewWindowBuilder::new(app, "toast", WebviewUrl::App("toast.html".into()))
@@ -1871,6 +1857,7 @@ fn create_windows(app: &AppHandle) -> tauri::Result<()> {
     for label in ["overlay", "toast", "request", "glow"] {
         if let Some(window) = app.get_webview_window(label) {
             macos::join_all_spaces(&window);
+            no_window_animations(&window);
         }
     }
     macos::above_menu_bar(&glow);
@@ -1972,10 +1959,8 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             frozen_pixels,
             show_overlay,
-            show_overlay_armed,
-            freeze_now,
+            reveal_overlay,
             refreeze,
-            set_freeze_on_draw,
             hide_overlay,
             overlay_loaded,
             cancel_capture,

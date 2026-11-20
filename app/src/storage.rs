@@ -13,13 +13,9 @@ use std::{fs, io, path::PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-/// F6 on MacBooks is a system key (Do Not Disturb, keyboard light) unless
-/// Fn is held, so the Mac gets ⌘⇧2, next to the screenshot shortcuts ⌘⇧3/4/5.
-pub const DEFAULT_HOTKEY: &str = if cfg!(target_os = "macos") {
-    "Super+Shift+Digit2"
-} else {
-    "F6"
-};
+/// One key on every system. On MacBook keyboards it's Fn+F6 (unless the F
+/// keys are set to work as standard function keys); the welcome screen says so.
+pub const DEFAULT_HOTKEY: &str = "F6";
 pub const DEFAULT_KEEP_CAPTURES: usize = 10;
 pub const MAX_KEEP_CAPTURES: usize = 100;
 
@@ -55,9 +51,6 @@ pub struct Config {
     /// Which monitor to capture: "" = the one under the mouse, "primary", or
     /// a monitor's name (falls back to the mouse when it isn't connected).
     pub capture_monitor: String,
-    /// Freeze the screen at the first click instead of right at the hotkey,
-    /// so the user can still switch windows, desktops or monitors first.
-    pub freeze_on_draw: bool,
     /// AI tools the user chose to connect (ids from `integrations::TOOLS`).
     pub tools: Vec<String>,
 }
@@ -75,7 +68,6 @@ impl Default for Config {
             onboarded: false,
             request_sound: true,
             capture_monitor: String::new(),
-            freeze_on_draw: false,
             tools: vec![],
         }
     }

@@ -1,6 +1,6 @@
 [package]
 name = "scribble2fix"
-version = "1.1.3"
+version = "1.1.4"
 edition = "2021"
 description = "Mark up your screen and hand it to an AI coding tool"
 license-file = "../LICENSE"
@@ -30,12 +30,15 @@ jsonc-parser = { version = "0.34", features = ["cst", "serde"] }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Graphics_Gdi", "Win32_UI_WindowsAndMessaging", "Win32_UI_Shell"] }
-windows = { version = "0.62", features = ["Win32_System_Com", "Win32_System_Registry", "Win32_System_RemoteDesktop", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging"] }
+windows = { version = "0.62", features = ["Win32_Graphics_Dwm", "Win32_System_Com", "Win32_System_Registry", "Win32_System_RemoteDesktop", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"
-objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "libc", "NSApplication", "NSResponder", "NSRunningApplication", "NSScreen", "NSWindow", "NSWorkspace"] }
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "libc", "objc2-core-foundation", "NSApplication", "NSResponder", "NSRunningApplication", "NSScreen", "NSWindow", "NSWorkspace"] }
 objc2-foundation = { version = "0.3", default-features = false, features = ["std", "block2", "NSArray", "NSEnumerator", "NSNotification", "NSOperation", "NSString"] }
 block2 = "0.6"
 objc2-core-foundation = { version = "0.3", default-features = false, features = ["std", "CFArray", "CFCGTypes", "CFDictionary", "CFNumber", "CFString"] }
 objc2-core-graphics = { version = "0.3", default-features = false, features = ["std", "CGGeometry", "CGWindow"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+gtk = "0.18"

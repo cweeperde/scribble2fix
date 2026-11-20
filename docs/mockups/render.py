@@ -226,7 +226,7 @@ def hero_and_demo(browser):
 
     page = open_overlay(browser, bg, size)
     # The soft white light sweeps turn into hard bands in a GIF's limited palette.
-    page.add_style_tag(content="#shine, #flash, #lift::after { display: none !important; }")
+    page.add_style_tag(content="#shine, #lift::after { display: none !important; }")
     rec = Recorder(page)
     show(page, "mock-screen")  # the screen as it is before the overlay opens
     rec.hold(700)
@@ -297,7 +297,7 @@ def tools(browser):
     page = open_overlay(browser, bg, size)
     start_capture(page, size)
     page.wait_for_timeout(1500)
-    page.add_style_tag(content="#toolbar-pos, #hint, #frame, #glow, #bloom, #spark, #flash, #vignette { display: none !important; }")
+    page.add_style_tag(content="#toolbar-pos, #hint, #frame, #glow, #bloom, #spark { display: none !important; }")
 
     keys(page, None, "2", "p")
     drag(page, ellipse(delete["cx"], delete["cy"], delete["w"] / 2 + 16, delete["h"] / 2 + 14))
@@ -330,8 +330,8 @@ def static_pages(browser):
     page.add_init_script(path=str(HERE / "tauri-stub.js"))
     page.goto(url(UI / "onboarding.html") + "?w=520&h=700")
     page.wait_for_timeout(300)
-    page.click("#next")
-    page.click("#next")
+    for _ in range(3):  # welcome, hotkey, toolbar, then the AI tools
+        page.click("#next")
     # Everything found starts switched on; show a typical choice instead.
     for tool in ["copilot", "cursor", "gemini", "lumo"]:
         page.click(f"input[data-id={tool}]")

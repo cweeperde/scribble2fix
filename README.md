@@ -77,7 +77,7 @@ Opens in a blink, lives in the tray, and nothing leaves your computer unless you
 
 ### 1 · Press `F6`
 
-The screen freezes and the toolbar appears. On a Mac it's `⌘⇧2`.
+The screen freezes and the toolbar appears. On a MacBook it's `Fn` `F6`.
 
 </td>
 <td width="33%" align="center" valign="top">
@@ -130,6 +130,7 @@ Copied. Paste it anywhere, or type `/scribble` in your AI tool.
 |:-:|---|
 | `P` `B` `A` | Freehand, box, arrow (drag in a curve to bend it) |
 | `T` `N` | Text note, numbered marker (*"swap 1 and 2"*) |
+| `R` | Hide private info: blurred while you draw, solid black in what's sent |
 | `E` | Eraser, or right-click a mark with any tool |
 | `+` `-` | Stroke size, or Ctrl + scroll |
 
@@ -142,6 +143,8 @@ Copied. Paste it anywhere, or type `/scribble` in your AI tool.
 ### What your AI gets
 
 The image is cropped to your marks and gets a small color legend, so any AI understands it, even pasted into a plain chat. Connected tools also get the same area without your marks, the name of the app you drew on, and every mark as text: *"REMOVE freehand mark spanning (318, 462) to (540, 532)"*.
+
+**Hide private info** with `R`: drag over a password, an email or anything else the AI shouldn't see. While you draw it's blurred; in both images that are sent it's solid black, so nothing of the original is left to recover. The AI is told the areas are hidden on purpose and not to go looking for what was there.
 
 <div align="center">
 <img src="docs/images/result.png" alt="The exported image: cropped to the marks, with a color legend" width="700">
@@ -207,7 +210,7 @@ Start a new session after connecting. Then:
 
 1. Drag Scribble2Fix into **Applications**.
 2. The app isn't notarized yet, so run this once in Terminal:<br>`xattr -dr com.apple.quarantine /Applications/Scribble2Fix.app`
-3. Allow **Screen Recording** when asked, then restart the app. It lives in the menu bar. The hotkey on a Mac is `⌘⇧2`.
+3. Allow **Screen Recording** when asked, then restart the app. It lives in the menu bar. On a MacBook keyboard the hotkey is `Fn` `F6`.
 
 </td>
 <td width="33%" valign="top">
@@ -230,16 +233,16 @@ Start a new session after connecting. Then:
 
 ### First start
 
-A short welcome explains the basics, lets you pick your hotkey and connects the AI tools it finds on your computer. After that, Scribble2Fix waits quietly in the tray and updates itself in the background.
+A short welcome explains the basics, lets you pick your hotkey and toolbar and connects the AI tools it finds on your computer. After that, Scribble2Fix waits quietly in the tray and updates itself in the background.
 
 **Settings** (right-click the tray icon):
 
-- **Hotkey**, **start at login**, **simple toolbar**
-- **Pause in fullscreen apps**, so games keep their F6
-- **Freeze when I start drawing**: the screen stays live after the hotkey, so you can still switch windows, desktops or monitors, and your first click freezes it
+- **General**: hotkey, start at login, pause in fullscreen apps (so games keep their F6), monitor, automatic updates
 - **AI tools**: connect or disconnect each one
-- **Captures**: how many to keep, never save images, or copy the file path instead of the image
-- **Automatic updates**, and **Show welcome again** under About
+- **Captures**: simple toolbar, how many to keep, never save images, or copy the file path instead of the image
+- **About**: **Run setup again** to see the welcome screen once more
+
+Switched to another desktop or app before drawing? The new screen is frozen instead. Screenshot tools like Win+Shift+S leave your frozen scribble alone.
 
 </td>
 <td width="38%" align="center" valign="middle">
@@ -252,7 +255,7 @@ A short welcome explains the basics, lets you pick your hotkey and connects the 
 
 ## Privacy
 
-Everything stays on your computer. Scribbles are saved in `~/.scribble2fix/captures/` (unless you turn saving off) and only leave your machine when you paste them somewhere or a connected AI tool reads them. The only connection Scribble2Fix makes on its own is the update check with GitHub, which you can turn off.
+Everything stays on your computer. Hide anything sensitive with `R` before you send it. Scribbles are saved in `~/.scribble2fix/captures/` (unless you turn saving off) and only leave your machine when you paste them somewhere or a connected AI tool reads them. The only connection Scribble2Fix makes on its own is the update check with GitHub, which you can turn off.
 
 ## FAQ
 
