@@ -77,7 +77,7 @@ Opens in a blink, lives in the tray, and nothing leaves your computer unless you
 
 ### 1 · Press `F6`
 
-The screen freezes and the toolbar appears.
+The screen freezes and the toolbar appears. On a Mac it's `⌘⇧2`.
 
 </td>
 <td width="33%" align="center" valign="top">
@@ -207,7 +207,7 @@ Start a new session after connecting. Then:
 
 1. Drag Scribble2Fix into **Applications**.
 2. The app isn't notarized yet, so run this once in Terminal:<br>`xattr -dr com.apple.quarantine /Applications/Scribble2Fix.app`
-3. Allow **Screen Recording** when asked, then restart the app. It lives in the menu bar.
+3. Allow **Screen Recording** when asked, then restart the app. It lives in the menu bar. The hotkey on a Mac is `⌘⇧2`.
 
 </td>
 <td width="33%" valign="top">

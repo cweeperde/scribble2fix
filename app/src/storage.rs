@@ -13,7 +13,13 @@ use std::{fs, io, path::PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-pub const DEFAULT_HOTKEY: &str = "F6";
+/// F6 on MacBooks is a system key (Do Not Disturb, keyboard light) unless
+/// Fn is held, so the Mac gets ⌘⇧2, next to the screenshot shortcuts ⌘⇧3/4/5.
+pub const DEFAULT_HOTKEY: &str = if cfg!(target_os = "macos") {
+    "Super+Shift+Digit2"
+} else {
+    "F6"
+};
 pub const DEFAULT_KEEP_CAPTURES: usize = 10;
 pub const MAX_KEEP_CAPTURES: usize = 100;
 

@@ -67,6 +67,63 @@ struct AppState {
     request_generation: AtomicU64,
     /// The hotkey is released because a fullscreen app is in front.
     hotkey_paused: AtomicBool,
+    /// The windows on screen when it froze, front to back.
+    windows: Mutex<Vec<ScreenWindow>>,
+}
+
+/// A window on screen, in physical pixels like `Area`.
+#[derive(Clone)]
+struct ScreenWindow {
+    x: f64,
+    y: f64,
+    width: f64,
+    height: f64,
+    app_name: String,
+    title: String,
+}
+
+/// The windows on screen (not ours), front to back.
+fn screen_windows(area: &Area) -> Vec<ScreenWindow> {
+    #[cfg(target_os = "macos")]
+    {
+        // Points; on the captured monitor physical pixels are points × scale.
+        let k = area.scale;
+        macos::app_windows()
+            .into_iter()
+            .map(|w| ScreenWindow { x: w.x * k, y: w.y * k, width: w.width * k, height: w.height * k, ..w })
+            .collect()
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = area;
+        let own = std::process::id();
+        xcap::Window::all()
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|w| w.pid().is_ok_and(|p| p != own) && !w.is_minimized().unwrap_or(false))
+            .filter_map(|w| {
+                Some(ScreenWindow {
+                    x: w.x().ok()? as f64,
+                    y: w.y().ok()? as f64,
+                    width: w.width().ok()? as f64,
+                    height: w.height().ok()? as f64,
+                    app_name: w.app_name().unwrap_or_default(),
+                    title: w.title().unwrap_or_default(),
+                })
+            })
+            .collect()
+    }
+}
+
+/// "Super+Shift+Digit2" as "⌘ + Shift + 2" (Mac) or "Win + Shift + 2", like
+/// prettyHotkey in common.js.
+fn pretty_hotkey(hotkey: &str) -> String {
+    let win = if cfg!(target_os = "macos") { "⌘" } else { "Win" };
+    hotkey
+        .split('+')
+        .map(|p| p.trim_start_matches("Key").trim_start_matches("Digit").replace("Super", win))
+        .collect::<Vec<_>>()
+        .join(" + ")
 }
 
 fn err(e: impl std::fmt::Display) -> String {
@@ -86,16 +143,39 @@ fn update_config(app: &AppHandle, change: impl FnOnce(&mut Config)) -> Result<Co
     Ok(config.clone())
 }
 
-// ---------------------------------------------------------------- macOS permission
+// ---------------------------------------------------------------- macOS
 
-/// Without the Screen Recording permission macOS still returns a screenshot,
-/// but with every window removed (only wallpaper and menu bar). If it looks
-/// missing, ask for it and open the settings page, but only once per run:
-/// the check can stay negative until the app restarts, and the capture
-/// itself is still attempted.
+/// The top of a screen: the camera notch (in CSS px from the screen's top
+/// left corner) and how far the toolbar has to move down to stay clear of it.
+#[derive(Serialize, Clone, Copy, Default)]
+#[serde(rename_all = "camelCase")]
+struct ScreenTop {
+    safe_top: f64,
+    notch: Option<Notch>,
+}
+
+#[derive(Serialize, Clone, Copy)]
+struct Notch {
+    left: f64,
+    right: f64,
+    height: f64,
+}
+
 #[cfg(target_os = "macos")]
 mod macos {
-    use std::sync::atomic::{AtomicBool, Ordering};
+    use super::{Notch, ScreenTop, ScreenWindow};
+    use objc2::MainThreadMarker;
+    use objc2_core_foundation::{CFDictionary, CFNumber, CFNumberType, CFString, CGRect};
+    use objc2_core_graphics::{
+        CGRectMakeWithDictionaryRepresentation, CGWindowListCopyWindowInfo, CGWindowListOption,
+    };
+    use std::ffi::c_void;
+    use objc2_app_kit::{
+        NSApplicationActivationOptions, NSPopUpMenuWindowLevel, NSRunningApplication, NSScreen,
+        NSWindow, NSWindowCollectionBehavior,
+    };
+    use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
+    use tauri::{AppHandle, Manager, WebviewWindow};
 
     #[link(name = "CoreGraphics", kind = "framework")]
     extern "C" {
@@ -105,7 +185,12 @@ mod macos {
 
     static ASKED: AtomicBool = AtomicBool::new(false);
 
-    /// Returns false only the first time access looks missing in this run.
+    /// Without the Screen Recording permission macOS still returns a
+    /// screenshot, but with every window removed (only wallpaper and menu
+    /// bar). If it looks missing, ask for it and open the settings page, but
+    /// only once per run: the check can stay negative until the app restarts,
+    /// and the capture itself is still attempted. Returns false only the
+    /// first time access looks missing in this run.
     pub fn check_screen_access() -> bool {
         if unsafe { CGPreflightScreenCaptureAccess() } || ASKED.swap(true, Ordering::SeqCst) {
             return true;
@@ -117,13 +202,156 @@ mod macos {
             .spawn();
         false
     }
+
+    /// Runs `f` on the main thread (AppKit requires it) and returns its result.
+    fn on_main<R: Send + 'static>(app: &AppHandle, f: impl FnOnce() -> R + Send + 'static) -> Option<R> {
+        if MainThreadMarker::new().is_some() {
+            return Some(f());
+        }
+        let (tx, rx) = std::sync::mpsc::channel();
+        app.run_on_main_thread(move || {
+            let _ = tx.send(f());
+        })
+        .ok()?;
+        rx.recv().ok()
+    }
+
+    fn with_ns_window(window: &WebviewWindow, f: impl FnOnce(&NSWindow) + Send + 'static) {
+        let Ok(ptr) = window.ns_window() else { return };
+        let ptr = ptr as usize;
+        on_main(window.app_handle(), move || {
+            if let Some(w) = unsafe { (ptr as *const NSWindow).as_ref() } {
+                f(w)
+            }
+        });
+    }
+
+    /// Shows the window on every desktop (Space) and over fullscreen apps, so
+    /// it's on the one the user is looking at and stays there when they switch.
+    pub fn join_all_spaces(window: &WebviewWindow) {
+        with_ns_window(window, |w| {
+            w.setCollectionBehavior(
+                NSWindowCollectionBehavior::CanJoinAllSpaces
+                    | NSWindowCollectionBehavior::FullScreenAuxiliary
+                    | NSWindowCollectionBehavior::Stationary
+                    | NSWindowCollectionBehavior::IgnoresCycle,
+            )
+        });
+    }
+
+    /// "Always on top" windows still stay below the menu bar and the Dock.
+    /// The frozen screen and the frame have to cover them too.
+    pub fn above_menu_bar(window: &WebviewWindow) {
+        with_ns_window(window, |w| w.setLevel(NSPopUpMenuWindowLevel));
+    }
+
+    /// Notch and safe area of the screen at `x`, `width` (points), from the
+    /// areas macOS reports left and right of the camera housing.
+    pub fn screen_top(app: &AppHandle, x: f64, width: f64) -> ScreenTop {
+        on_main(app, move || {
+            let mtm = MainThreadMarker::new()?;
+            let screen = NSScreen::screens(mtm).iter().find(|s| {
+                let f = s.frame();
+                (f.origin.x - x).abs() < 1.0 && (f.size.width - width).abs() < 1.0
+            })?;
+            let frame = screen.frame();
+            let safe_top = screen.safeAreaInsets().top;
+            let (l, r) = (screen.auxiliaryTopLeftArea(), screen.auxiliaryTopRightArea());
+            let notch = (safe_top > 0.0 && l.size.width > 0.0 && r.size.width > 0.0).then(|| Notch {
+                left: l.origin.x + l.size.width - frame.origin.x,
+                right: r.origin.x - frame.origin.x,
+                height: safe_top,
+            });
+            Some(ScreenTop { safe_top, notch })
+        })
+        .flatten()
+        .unwrap_or_default()
+    }
+
+    /// Normal app windows (layer 0, not ours) from front to back, in points.
+    pub fn app_windows() -> Vec<ScreenWindow> {
+        let Some(list) = CGWindowListCopyWindowInfo(
+            CGWindowListOption::OptionOnScreenOnly | CGWindowListOption::ExcludeDesktopElements,
+            0,
+        ) else {
+            return Vec::new();
+        };
+        let own = std::process::id() as i32;
+        (0..list.count())
+            .filter_map(|i| unsafe {
+                let info = (list.value_at_index(i) as *const CFDictionary).as_ref()?;
+                let get = |key: &str| {
+                    let key = CFString::from_str(key);
+                    let value = info.value((&*key as *const CFString).cast());
+                    (!value.is_null()).then_some(value)
+                };
+                let number = |key: &str| {
+                    let n = &*(get(key)? as *const CFNumber);
+                    let mut v = 0i32;
+                    n.value(CFNumberType::IntType, &mut v as *mut i32 as *mut c_void).then_some(v)
+                };
+                let string = |key: &str| {
+                    get(key).map(|v| (*(v as *const CFString)).to_string()).unwrap_or_default()
+                };
+                if number("kCGWindowLayer")? != 0 || number("kCGWindowOwnerPID")? == own {
+                    return None;
+                }
+                let mut r = CGRect::default();
+                let bounds = &*(get("kCGWindowBounds")? as *const CFDictionary);
+                if !CGRectMakeWithDictionaryRepresentation(Some(bounds), &mut r) {
+                    return None;
+                }
+                Some(ScreenWindow {
+                    x: r.origin.x,
+                    y: r.origin.y,
+                    width: r.size.width,
+                    height: r.size.height,
+                    app_name: string("kCGWindowOwnerName"),
+                    title: string("kCGWindowName"),
+                })
+            })
+            .collect()
+    }
+
+    static FRONT_PID: AtomicI32 = AtomicI32::new(0);
+
+    /// The app the user was in when the screen froze.
+    pub fn remember_front_app(pid: u64) {
+        let pid = i32::try_from(pid).unwrap_or(0);
+        let own = std::process::id() as i32;
+        FRONT_PID.store(if pid == own { 0 } else { pid }, Ordering::SeqCst);
+    }
+
+    /// Hands the focus back to that app when the overlay closes. Otherwise
+    /// Scribble2Fix stays the active app: ⌘V wouldn't paste where the user
+    /// was, and the next capture would name Scribble2Fix as the app.
+    pub fn restore_front_app() {
+        let pid = FRONT_PID.swap(0, Ordering::SeqCst);
+        if pid == 0 {
+            return;
+        }
+        if let Some(app) = NSRunningApplication::runningApplicationWithProcessIdentifier(pid) {
+            #[allow(deprecated)]
+            let _ = app.activateWithOptions(NSApplicationActivationOptions::ActivateIgnoringOtherApps);
+        }
+    }
 }
 
 #[cfg(not(target_os = "macos"))]
 mod macos {
+    use super::ScreenTop;
+    use tauri::{AppHandle, WebviewWindow};
+
     pub fn check_screen_access() -> bool {
         true
     }
+    pub fn join_all_spaces(_window: &WebviewWindow) {}
+    pub fn above_menu_bar(_window: &WebviewWindow) {}
+    pub fn screen_top(_app: &AppHandle, _x: f64, _width: f64) -> ScreenTop {
+        ScreenTop::default()
+    }
+    pub fn remember_front_app(_pid: u64) {}
+    pub fn restore_front_app() {}
 }
 
 // ---------------------------------------------------------------- capture
@@ -181,9 +409,13 @@ fn target_monitor(app: &AppHandle) -> Option<tauri::Monitor> {
 fn capture(app: &AppHandle) -> Result<(), String> {
     let state = app.state::<AppState>();
     let unix_ms = chrono::Utc::now().timestamp_millis();
-    let (app_name, window_title) = active_win_pos_rs::get_active_window()
-        .map(|w| (w.app_name, w.title))
-        .unwrap_or_default();
+    let (app_name, window_title) = match active_win_pos_rs::get_active_window() {
+        Ok(w) => {
+            macos::remember_front_app(w.process_id);
+            (w.app_name, w.title)
+        }
+        Err(_) => Default::default(),
+    };
 
     let monitor = target_monitor(app).ok_or("no monitor found")?;
     let area = Area {
@@ -206,6 +438,13 @@ fn capture(app: &AppHandle) -> Result<(), String> {
 
     *state.pixels.lock().unwrap() = Some(shot.into_raw());
     *state.area.lock().unwrap() = Some(area);
+    // For naming the app the marks end up on. Not needed until the user is
+    // done, so it doesn't hold up the overlay.
+    state.windows.lock().unwrap().clear();
+    let handle = app.clone();
+    thread::spawn(move || {
+        *handle.state::<AppState>().windows.lock().unwrap() = screen_windows(&area);
+    });
     *state.source.lock().unwrap() = Source {
         unix_ms,
         app_name,
@@ -240,6 +479,8 @@ fn capture(app: &AppHandle) -> Result<(), String> {
         /// Mouse position on the captured monitor (physical px), where the
         /// intro animation starts; the center if the mouse is elsewhere.
         cursor: (f64, f64),
+        /// The camera notch (macOS), which the toolbar and frame avoid.
+        top: ScreenTop,
     }
     let cursor = app
         .cursor_position()
@@ -260,6 +501,7 @@ fn capture(app: &AppHandle) -> Result<(), String> {
                 request,
                 simple: config(app).simple_toolbar,
                 cursor,
+                top: macos::screen_top(app, area.x as f64 / area.scale, area.width as f64 / area.scale),
             },
         )
         .map_err(err)
@@ -299,7 +541,11 @@ fn frozen_pixels(state: State<AppState>) -> Result<tauri::ipc::Response, String>
 #[tauri::command]
 fn show_overlay(window: WebviewWindow) -> Result<(), String> {
     window.show().map_err(err)?;
-    window.set_always_on_top(true).map_err(err)?;
+    if cfg!(target_os = "macos") {
+        macos::above_menu_bar(&window);
+    } else {
+        window.set_always_on_top(true).map_err(err)?;
+    }
     window.set_focus().map_err(err)
 }
 
@@ -317,6 +563,7 @@ fn hide_overlay_window(window: &WebviewWindow) -> Result<(), String> {
     let _ = window.set_always_on_top(false);
     window.hide().map_err(err)?;
     refresh_taskbars();
+    macos::restore_front_app();
     Ok(())
 }
 
@@ -390,8 +637,22 @@ fn finish_capture(
 ) -> Result<(), String> {
     hide_overlay_window(&window)?;
     let state = app.state::<AppState>();
-    let source = state.source.lock().unwrap().clone();
+    let mut source = state.source.lock().unwrap().clone();
     state.active.store(false, Ordering::SeqCst);
+    // The app is the topmost window under the middle of the marks. The one
+    // in front when the screen froze may be on another monitor.
+    if let Some(area) = *state.area.lock().unwrap() {
+        let x = area.x as f64 + crop.x as f64 + crop.width as f64 / 2.0;
+        let y = area.y as f64 + crop.y as f64 + crop.height as f64 / 2.0;
+        let windows = state.windows.lock().unwrap();
+        let hit = windows.iter().find(|w| {
+            x >= w.x && x < w.x + w.width && y >= w.y && y < w.y + w.height
+        });
+        if let Some(w) = hit.filter(|w| !w.app_name.is_empty()) {
+            source.app_name = w.app_name.clone();
+            source.window_title = w.title.clone();
+        }
+    }
 
     let app = app.clone();
     thread::spawn(move || {
@@ -519,7 +780,15 @@ fn show_toast_for(app: &AppHandle, text: &str, ms: u64) {
         let w = (TOAST_WIDTH * a.scale) as u32;
         let h = (64.0 * a.scale) as u32;
         let x = a.x + (a.width.saturating_sub(w) / 2) as i32;
-        let y = a.y + a.height as i32 - h as i32 - (90.0 * a.scale) as i32;
+        // Above the taskbar / Dock: the bottom of that monitor's work area.
+        let bottom = app
+            .available_monitors()
+            .unwrap_or_default()
+            .iter()
+            .find(|m| m.position().x == a.x && m.position().y == a.y)
+            .map(|m| m.work_area().position.y + m.work_area().size.height as i32)
+            .unwrap_or(a.y + a.height as i32);
+        let y = bottom - h as i32 - (40.0 * a.scale) as i32;
         let _ = toast.set_position(PhysicalPosition::new(x, y));
         let _ = toast.set_size(PhysicalSize::new(w, h));
     }
@@ -589,6 +858,14 @@ fn show_request(app: &AppHandle) {
     };
     // The work area leaves out the taskbar / dock / menu bar.
     let work = *monitor.work_area();
+    // On macOS the frame goes around the whole screen, above the menu bar and
+    // around the camera notch (it's click-through). On Windows it leaves out
+    // the taskbar, so Windows doesn't treat it as a fullscreen window.
+    let frame = if cfg!(target_os = "macos") {
+        tauri::PhysicalRect { position: *monitor.position(), size: *monitor.size() }
+    } else {
+        work
+    };
     let scale = monitor.scale_factor();
     let (w, h) = (
         (REQUEST_SIZE.0 * scale) as u32,
@@ -597,8 +874,10 @@ fn show_request(app: &AppHandle) {
     let x = work.position.x + (work.size.width.saturating_sub(w) / 2) as i32;
     let _ = card.set_position(PhysicalPosition::new(x, work.position.y));
     let _ = card.set_size(PhysicalSize::new(w, h));
-    let _ = glow.set_position(work.position);
-    let _ = glow.set_size(work.size);
+    let _ = glow.set_position(frame.position);
+    let _ = glow.set_size(frame.size);
+    let top = macos::screen_top(app, frame.position.x as f64 / scale, frame.size.width as f64 / scale);
+    let _ = glow.emit("notch", top.notch);
 
     let config = config(app);
     let _ = card.emit(
@@ -766,7 +1045,7 @@ fn set_hotkey(app: AppHandle, hotkey: String) -> Result<(), String> {
         .parse::<Shortcut>()
         .map_err(|e| format!("Not a valid shortcut: {e}"))?;
     register_hotkey(&app, &hotkey)
-        .map_err(|_| format!("{hotkey} is already used by another app"))?;
+        .map_err(|_| format!("{} is already used by another app", pretty_hotkey(&hotkey)))?;
     let _ = app.global_shortcut().unregister_all();
     update_config(&app, |c| c.hotkey = hotkey)?;
     Ok(())
@@ -921,6 +1200,8 @@ fn open_window(app: &AppHandle, label: &str, title: &str, width: f64, height: f6
     else {
         return;
     };
+    // On macOS a menu bar app's new window can open behind the active app.
+    let _ = window.set_focus();
     let _ = app.global_shortcut().unregister_all();
     let app = app.clone();
     let label = label.to_string();
@@ -941,12 +1222,13 @@ fn open_window(app: &AppHandle, label: &str, title: &str, width: f64, height: f6
                 return;
             }
             let hotkey = config(&app).hotkey;
+            let pretty = pretty_hotkey(&hotkey);
             if register_hotkey(&app, &hotkey).is_err() {
-                show_toast(&app, &format!("{hotkey} is in use by another app"));
+                show_toast(&app, &format!("{pretty} is in use by another app"));
             } else if label == "onboarding" {
                 show_toast(
                     &app,
-                    &format!("Scribble2Fix is ready. Press {hotkey} to mark up your screen"),
+                    &format!("Scribble2Fix is ready. Press {pretty} to mark up your screen"),
                 );
             }
         }
@@ -1122,6 +1404,12 @@ fn create_windows(app: &AppHandle) -> tauri::Result<()> {
         .focusable(false)
         .build()?;
     glow.set_ignore_cursor_events(true)?;
+    for label in ["overlay", "toast", "request", "glow"] {
+        if let Some(window) = app.get_webview_window(label) {
+            macos::join_all_spaces(&window);
+        }
+    }
+    macos::above_menu_bar(&glow);
     Ok(())
 }
 
@@ -1264,7 +1552,7 @@ fn main() {
                     handle,
                     &format!(
                         "{} is in use. Pick another hotkey in Settings",
-                        config.hotkey
+                        pretty_hotkey(&config.hotkey)
                     ),
                 );
             } else if !request {
@@ -1272,7 +1560,7 @@ fn main() {
                     handle,
                     &format!(
                         "Scribble2Fix is running. Press {} to mark up your screen",
-                        config.hotkey
+                        pretty_hotkey(&config.hotkey)
                     ),
                 );
             }

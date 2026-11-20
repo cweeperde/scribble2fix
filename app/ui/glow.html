@@ -18,7 +18,9 @@
   <div class="frame-edge"></div>
 </div>
 <script src="guard.js"></script>
+<script src="frame.js"></script>
 <script>
+window.__TAURI__.event.listen('notch', ({ payload }) => setFrameNotch(payload));
 window.__TAURI__.event.listen('glow', ({ payload }) => {
   document.body.classList.toggle('on', payload === true);
 });

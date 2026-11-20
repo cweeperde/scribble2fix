@@ -7,31 +7,36 @@
 
    Its outer edge is square so the screen corners stay covered; only the inner
    edge is rounded. The mask is four straight bands plus four corner pieces,
-   each solid outside a quarter circle. Add `.turning` to a parent to make the
-   colors slowly go round. */
+   each solid outside a quarter circle, plus the band around a MacBook's
+   camera notch (frame.js). Add `.turning` to a parent to make the colors
+   slowly go round. */
 @property --frame-a { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
 
 .frame-edge {
   --w: 4px;   /* band width */
   --r: 16px;  /* radius of the rounded inner edge */
   --c: calc(var(--w) + var(--r));
+  --rt: var(--r); /* top corners: smaller on screens with rounded corners (frame.js) */
+  --ct: calc(var(--w) + var(--rt));
   --band: linear-gradient(#000 0 0);
   position: fixed; inset: 0; pointer-events: none;
   background: conic-gradient(from var(--frame-a), #34c759, #0a84ff, #ff3b30, #34c759);
   -webkit-mask:
     var(--band) top / 100% var(--w) no-repeat, var(--band) bottom / 100% var(--w) no-repeat,
     var(--band) left / var(--w) 100% no-repeat, var(--band) right / var(--w) 100% no-repeat,
-    radial-gradient(circle var(--r) at 100% 100%, transparent calc(100% - 0.75px), #000 100%) top left / var(--c) var(--c) no-repeat,
-    radial-gradient(circle var(--r) at 0 100%, transparent calc(100% - 0.75px), #000 100%) top right / var(--c) var(--c) no-repeat,
+    radial-gradient(circle var(--rt) at 100% 100%, transparent calc(100% - 0.75px), #000 100%) top left / var(--ct) var(--ct) no-repeat,
+    radial-gradient(circle var(--rt) at 0 100%, transparent calc(100% - 0.75px), #000 100%) top right / var(--ct) var(--ct) no-repeat,
     radial-gradient(circle var(--r) at 100% 0, transparent calc(100% - 0.75px), #000 100%) bottom left / var(--c) var(--c) no-repeat,
-    radial-gradient(circle var(--r) at 0 0, transparent calc(100% - 0.75px), #000 100%) bottom right / var(--c) var(--c) no-repeat;
+    radial-gradient(circle var(--r) at 0 0, transparent calc(100% - 0.75px), #000 100%) bottom right / var(--c) var(--c) no-repeat,
+    var(--notch, linear-gradient(transparent 0 0));
   mask:
     var(--band) top / 100% var(--w) no-repeat, var(--band) bottom / 100% var(--w) no-repeat,
     var(--band) left / var(--w) 100% no-repeat, var(--band) right / var(--w) 100% no-repeat,
-    radial-gradient(circle var(--r) at 100% 100%, transparent calc(100% - 0.75px), #000 100%) top left / var(--c) var(--c) no-repeat,
-    radial-gradient(circle var(--r) at 0 100%, transparent calc(100% - 0.75px), #000 100%) top right / var(--c) var(--c) no-repeat,
+    radial-gradient(circle var(--rt) at 100% 100%, transparent calc(100% - 0.75px), #000 100%) top left / var(--ct) var(--ct) no-repeat,
+    radial-gradient(circle var(--rt) at 0 100%, transparent calc(100% - 0.75px), #000 100%) top right / var(--ct) var(--ct) no-repeat,
     radial-gradient(circle var(--r) at 100% 0, transparent calc(100% - 0.75px), #000 100%) bottom left / var(--c) var(--c) no-repeat,
-    radial-gradient(circle var(--r) at 0 0, transparent calc(100% - 0.75px), #000 100%) bottom right / var(--c) var(--c) no-repeat;
+    radial-gradient(circle var(--r) at 0 0, transparent calc(100% - 0.75px), #000 100%) bottom right / var(--c) var(--c) no-repeat,
+    var(--notch, linear-gradient(transparent 0 0));
 }
 
 /* A soft, narrow glow: a wider band, blurred as a whole (a blur on the masked

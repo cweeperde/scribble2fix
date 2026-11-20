@@ -98,7 +98,7 @@
   @keyframes sweep { to { background-position: 0 0; } }
 
   /* ---------------- toolbar */
-  #toolbar-pos { position: fixed; z-index: 2; top: 20px; left: 50%; transform: translateX(-50%); }
+  #toolbar-pos { position: fixed; z-index: 2; top: calc(20px + var(--safe-top, 0px)); left: 50%; transform: translateX(-50%); }
   #toolbar {
     display: flex; align-items: center; gap: 2px; padding: 5px; border-radius: 16px; color: var(--text);
     background: var(--bar); border: 1px solid var(--line);
@@ -153,7 +153,7 @@
   #size-dot { border-radius: 50%; box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.25); transition: width 0.2s var(--spring), height 0.2s var(--spring), background-color 0.2s; }
 
   #hint {
-    position: fixed; z-index: 1; top: 80px; left: 50%; translate: -50% 0;
+    position: fixed; z-index: 1; top: calc(80px + var(--safe-top, 0px)); left: 50%; translate: -50% 0;
     max-width: calc(100vw - 48px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     padding: 10px 16px; border-radius: 999px; color: #fff; pointer-events: none;
     background: var(--bar); border: 1px solid var(--line); backdrop-filter: blur(20px);
@@ -245,6 +245,7 @@
 </div>
 
 <script src="guard.js"></script>
+<script src="frame.js"></script>
 <script>
 const { invoke } = window.__TAURI__.core;
 const { listen } = window.__TAURI__.event;
@@ -271,6 +272,7 @@ let mode = 'add', tool = 'pen', size = DEFAULT_SIZE;
 let marks = [], undoStack = [], redoStack = [], current = null, busy = false;
 let textInput = null;        // the open text-label editor, if any
 let simple = false;          // Settings → "Simple toolbar": only colors, freehand, box, arrow
+let safeTop = 0;             // CSS px at the top that a MacBook's camera notch hides
 
 // Whether the extra tools are unfolded; remembered between captures.
 const store = { get: (k) => { try { return localStorage.getItem(k); } catch { return null; } },
@@ -288,6 +290,9 @@ listen('capture', async ({ payload }) => {
   toolbar.classList.toggle('simple', simple);
   if (simple) size = DEFAULT_SIZE;
   W = payload.width; H = payload.height;
+  safeTop = payload.top?.safeTop || 0;
+  document.documentElement.style.setProperty('--safe-top', safeTop + 'px');
+  setFrameNotch(payload.top?.notch);
   for (const c of [bg, fg, live]) { c.width = W; c.height = H; }
   const buf = await invoke('frozen_pixels');
   bg.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(buf), W, H), 0, 0);
@@ -336,9 +341,10 @@ function reset(request) {
 
 function kbd(text) { const k = document.createElement('kbd'); k.textContent = text; return k; }
 
-// Top center, a little away from the edge. It can be dragged from there.
+// Top center, a little away from the edge (and below a MacBook's camera
+// notch). It can be dragged from there.
 function placeToolbar() {
-  Object.assign(toolbarPos.style, { left: '50%', top: '20px', transform: 'translateX(-50%)' });
+  Object.assign(toolbarPos.style, { left: '50%', top: 'calc(20px + var(--safe-top, 0px))', transform: 'translateX(-50%)' });
 }
 
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
@@ -923,7 +929,7 @@ $('grip').addEventListener('pointerdown', (e) => {
   toolbarPos.style.transform = 'none';
   const move = (ev) => {
     toolbarPos.style.left = clamp(ev.clientX - dx, 0, innerWidth - r.width) + 'px';
-    toolbarPos.style.top = clamp(ev.clientY - dy, 0, innerHeight - r.height) + 'px';
+    toolbarPos.style.top = clamp(ev.clientY - dy, safeTop, innerHeight - r.height) + 'px';
   };
   move(e);
   const up = () => { grip.removeEventListener('pointermove', move); grip.removeEventListener('pointerup', up); };
