@@ -221,6 +221,7 @@ def hero_and_demo(browser):
     scene = browser.new_page(viewport={"width": size[0], "height": size[1]})
     scene.goto(url(HERE / "scene.html"))
     export, photo, name = box_of(scene, "Export legacy CSV"), box_of(scene, "Change photo"), box_of(scene, "Alex Morgan")
+    mail = box_of(scene, "alex@example.com")
     bg = scene.screenshot()
     scene.close()
 
@@ -235,7 +236,7 @@ def hero_and_demo(browser):
     show(page, "mock-key", False)
     show(page, "mock-screen", False)
     start_capture(page, size, (export["cx"] + 40, export["cy"] - 60))
-    for _ in range(18):  # intro: shutter, color ring from the mouse, frame, toolbar
+    for _ in range(18):  # intro: frame and toolbar come in
         rec.snap()
     page.wait_for_timeout(300)
     show(page, "mock-cursor")
@@ -258,7 +259,11 @@ def hero_and_demo(browser):
     for chunk in ("Add a ", "Save ", "button"):
         page.keyboard.type(chunk, delay=25)
         rec.snap()
-    keys(page, rec, "Enter", "p")
+    keys(page, rec, "Enter")
+    # Hide: the email address is private.
+    keys(page, rec, "r")
+    drag(page, [(mail["l"] - 5 + i * (mail["w"] + 10) / 10, mail["t"] + i * mail["h"] / 10) for i in range(11)], rec)
+    keys(page, rec, "p")
     page.mouse.move(size[0] - 140, size[1] - 120)
     show(page, "mock-cursor", False)
     page.wait_for_timeout(250)
@@ -290,6 +295,7 @@ def tools(browser):
     upload = box_of(scene, "Upload")
     icon = scene.locator(".icon").bounding_box()
     chips = [c.bounding_box() for c in scene.locator(".card:nth-child(5) .chip").all()]
+    secret = scene.locator(".secret").bounding_box()
     target = scene.locator(".card:nth-child(3) .chip").bounding_box()
     bg = scene.screenshot()
     scene.close()
@@ -311,6 +317,8 @@ def tools(browser):
     keys(page, None, "Enter", "3", "n")
     for c in chips:
         page.mouse.click(c["x"] + c["width"] + 2, c["y"] + c["height"] / 2)
+    keys(page, None, "r")
+    drag(page, [(secret["x"] - 4 + i * (secret["width"] + 8) / 10, secret["y"] - 4 + i * (secret["height"] + 8) / 10) for i in range(11)])
     page.wait_for_timeout(200)
     save_framed(page.screenshot(), "tools.png")
     page.close()

@@ -67,6 +67,20 @@ Opens in a blink, lives in the tray, and nothing leaves your computer unless you
 
 </td>
 </tr>
+<tr>
+<td width="50%" valign="top">
+
+**Hide what's private**<br>
+Black out a password, an email or an API key before you send. Nothing of the original is left, and your AI is told to leave it alone.
+
+</td>
+<td width="50%" valign="top">
+
+**Freezes the right screen**<br>
+Switched to another desktop or app right after the hotkey? That screen is frozen instead. A screenshot tool like Win+Shift+S still captures your scribble.
+
+</td>
+</tr>
 </table>
 
 ## How it works
@@ -84,7 +98,7 @@ The screen freezes and the toolbar appears. On a MacBook it's `Fn` `F6`.
 
 ### 2 · Mark it up
 
-Circle, box, point, number or write a note.
+Circle, box, point, number, write a note or hide something private.
 
 </td>
 <td width="33%" align="center" valign="top">
@@ -98,13 +112,13 @@ Copied. Paste it anywhere, or type `/scribble` in your AI tool.
 </table>
 
 <div align="center">
-<img src="docs/images/overlay.png" alt="The Scribble2Fix toolbar over a frozen web app with a red circle, a blue curved arrow, a green box and a text note" width="860">
+<img src="docs/images/overlay.png" alt="The Scribble2Fix toolbar over a frozen web app with a red circle, a blue curved arrow, a green box, a text note and a hidden email address" width="860">
 </div>
 
 ## The toolkit
 
 <div align="center">
-<img src="docs/images/tools.png" alt="Freehand, box, curved arrow, text label and numbered markers" width="860">
+<img src="docs/images/tools.png" alt="Freehand, box, curved arrow, text label, numbered markers and a hidden API key" width="860">
 </div>
 
 <br>
@@ -138,7 +152,7 @@ Copied. Paste it anywhere, or type `/scribble` in your AI tool.
 </tr>
 </table>
 
-`Ctrl+Z` undo · `Ctrl+Shift+Z` redo (`Cmd` on macOS) · `Esc` cancel · left-click the tray icon to start without the hotkey. Prefer fewer buttons? Turn on **Simple toolbar** in Settings. Several monitors? Pick the one that freezes under **Settings → Monitor** (default: the one under the mouse).
+`Ctrl+Z` undo · `Ctrl+Shift+Z` redo (`Cmd` on macOS) · `Esc` cancel · left-click the tray icon to start without the hotkey. Prefer fewer buttons? Turn on **Simple toolbar** under **Settings → Captures**. Several monitors? Pick the one that freezes under **Settings → General** (default: the one under the mouse).
 
 ### What your AI gets
 
@@ -147,7 +161,7 @@ The image is cropped to your marks and gets a small color legend, so any AI unde
 **Hide private info** with `R`: drag over a password, an email or anything else the AI shouldn't see. While you draw it's blurred; in both images that are sent it's solid black, so nothing of the original is left to recover. The AI is told the areas are hidden on purpose and not to go looking for what was there.
 
 <div align="center">
-<img src="docs/images/result.png" alt="The exported image: cropped to the marks, with a color legend" width="700">
+<img src="docs/images/result.png" alt="The exported image: cropped to the marks, the email address blacked out, with a color legend" width="700">
 </div>
 
 ## Works with your AI tools
@@ -242,8 +256,6 @@ A short welcome explains the basics, lets you pick your hotkey and toolbar and c
 - **Captures**: simple toolbar, how many to keep, never save images, or copy the file path instead of the image
 - **About**: **Run setup again** to see the welcome screen once more
 
-Switched to another desktop or app before drawing? The new screen is frozen instead. Screenshot tools like Win+Shift+S leave your frozen scribble alone.
-
 </td>
 <td width="38%" align="center" valign="middle">
 
@@ -264,7 +276,23 @@ Everything stays on your computer. Hide anything sensitive with `R` before you s
 
 <br>
 
-While Scribble2Fix runs it takes over its hotkey, and many apps use F6 to move focus. Pick another hotkey in Settings. For games and fullscreen videos, turn on **Pause hotkey in fullscreen apps**.
+While Scribble2Fix runs it takes over its hotkey, and many apps use F6 to move focus. Pick another hotkey in Settings. For games and fullscreen videos, turn on **Pause hotkey in fullscreen apps** under **Settings → General**.
+</details>
+
+<details>
+<summary><b>macOS: F6 does nothing on my MacBook</b></summary>
+
+<br>
+
+On MacBook keyboards the top row controls brightness, sound and so on. Press `Fn` `F6`, turn on "Use F1, F2, etc. keys as standard function keys" in System Settings → Keyboard, or pick another hotkey in Settings.
+</details>
+
+<details>
+<summary><b>Is a hidden area really gone?</b></summary>
+
+<br>
+
+Yes. What you hide with `R` is only blurred on your screen while you draw. In both images that are saved, copied and sent, it's replaced with solid black before they're created, so no pixel of the original is left (blur or pixelation can sometimes be reversed, solid black can't). The AI is told the area is hidden on purpose and not to look for what was there.
 </details>
 
 <details>
