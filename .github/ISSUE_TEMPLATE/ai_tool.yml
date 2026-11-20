@@ -1,0 +1,53 @@
+name: Support a new AI tool
+description: Ask for one-click setup of an AI tool that isn't in the list yet
+labels: [ai-tool]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Any tool that runs MCP servers already works when set up by hand: [Connect by hand](https://github.com/cweeperde/scribble2fix/blob/main/docs/manual-setup.md) has a prompt that lets your AI agent do it. This template is for adding the tool to **Settings → AI tools**, so it connects with one click.
+  - type: input
+    id: tool
+    attributes:
+      label: Tool
+      description: Name and website.
+      placeholder: "Windsurf, https://windsurf.com"
+    validations:
+      required: true
+  - type: dropdown
+    id: platforms
+    attributes:
+      label: Systems it runs on
+      multiple: true
+      options:
+        - Windows
+        - macOS
+        - Linux
+    validations:
+      required: true
+  - type: textarea
+    id: mcp
+    attributes:
+      label: How it adds MCP servers
+      description: A CLI command, a config file (its path on each system and an example entry), or only a settings page.
+      placeholder: |
+        Config file: ~/.codeium/windsurf/mcp_config.json (Windows: %USERPROFILE%\.codeium\windsurf\mcp_config.json)
+        { "mcpServers": { "name": { "command": "...", "args": [...] } } }
+    validations:
+      required: true
+  - type: textarea
+    id: extras
+    attributes:
+      label: Commands and permissions
+      description: Optional. Does it support custom slash commands, prompts or skills (where are they stored)? Can MCP tools be allowed without asking each time? Is there a timeout for tool calls?
+  - type: input
+    id: docs
+    attributes:
+      label: Link to its documentation
+      description: The page about MCP servers, if there is one.
+  - type: checkboxes
+    id: tried
+    attributes:
+      label: Set up by hand
+      options:
+        - label: I set Scribble2Fix up in this tool by hand and it works.

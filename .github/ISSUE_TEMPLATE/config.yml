@@ -1,1 +1,11 @@
-blank_issues_enabled: true
+blank_issues_enabled: false
+contact_links:
+  - name: Connect an AI tool by hand
+    url: https://github.com/cweeperde/scribble2fix/blob/main/docs/manual-setup.md
+    about: Setup for any MCP client, including a prompt that lets your AI agent do it.
+  - name: FAQ
+    url: https://github.com/cweeperde/scribble2fix#faq
+    about: Hotkey not working, macOS screen recording, Linux/Wayland and more.
+  - name: Report a security issue privately
+    url: https://github.com/cweeperde/scribble2fix/security/advisories/new
+    about: For anything that could expose private data. Please don't open a public issue.

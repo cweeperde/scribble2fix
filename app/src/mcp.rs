@@ -136,7 +136,8 @@ fn tool_definitions() -> Value {
         {
             "name": "get_latest_capture",
             "description": "Get the user's latest Scribble2Fix screen markup: a screenshot they drew on \
-                (green = add, red = remove, blue = change/move), the same area without the drawings, \
+                (green = add, red = remove, blue = change/move; solid black areas labeled \"Hidden\" \
+                were hidden on purpose and must be left alone), the same area without the drawings, \
                 and the app/window it was taken from. Use it when the user mentions their capture, \
                 scribble, drawing, markup, circle, or screenshot.",
             "inputSchema": { "type": "object", "properties": {} },

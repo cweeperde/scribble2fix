@@ -17,6 +17,8 @@ on:
     tags: ['v*']
     paths-ignore: &docs-only
       - README.md
+      - CHANGELOG.md
+      - SECURITY.md
       - LICENSE
       - docs/**
       - .github/ISSUE_TEMPLATE/**

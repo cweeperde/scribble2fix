@@ -4,7 +4,7 @@ window.__TAURI__ = {
   core: {
     invoke: async (cmd) => cmd === 'get_settings' ? {
       hotkey: 'F6', autostart: true, keepCaptures: 10, maxKeepCaptures: 100,
-      neverSave: false, autoUpdate: true, version: '1.0.0', requestSound: true, captureMonitor: '',
+      neverSave: false, autoUpdate: true, version: '1.1.4', requestSound: true, captureMonitor: '',
       monitors: [{ id: 'DISPLAY1', label: 'Display 1 · 2560 × 1440 (main)' }, { id: 'DISPLAY2', label: 'Display 2 · 1920 × 1080' }],
       tools: [
         { id: 'claude', name: 'Claude', installed: true, connected: true, found: 'Claude Code and Claude Desktop', setup: '/scribble command and MCP server' },

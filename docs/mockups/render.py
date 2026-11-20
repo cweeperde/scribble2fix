@@ -296,6 +296,7 @@ def tools(browser):
     icon = scene.locator(".icon").bounding_box()
     chips = [c.bounding_box() for c in scene.locator(".card:nth-child(5) .chip").all()]
     secret = scene.locator(".secret").bounding_box()
+    text_card = scene.locator(".card:nth-child(4)").bounding_box()
     target = scene.locator(".card:nth-child(3) .chip").bounding_box()
     bg = scene.screenshot()
     scene.close()
@@ -312,7 +313,7 @@ def tools(browser):
     keys(page, None, "3", "a")
     drag(page, arc((icon["x"] + icon["width"] / 2, icon["y"] - 10), (target["x"] + target["width"] / 2, target["y"] - 12), -46))
     keys(page, None, "1", "t")
-    page.mouse.click(upload["l"] - 6, upload["b"] + 42)
+    page.mouse.click(text_card["x"] + 14, upload["b"] + 42)
     page.keyboard.type("Allow PDF too")
     keys(page, None, "Enter", "3", "n")
     for c in chips:

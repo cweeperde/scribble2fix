@@ -332,7 +332,7 @@ function frames(n) {
   });
 }
 
-// Restarts the CSS intro animations (shutter, ring, frame, toolbar).
+// Restarts the CSS intro animations (light sweep, frame, toolbar).
 function playIntro() {
   // Toolbar items pop in one after another.
   [...toolbar.children].filter((c) => c.offsetParent).forEach((c, i) => c.style.setProperty('--i', i));
