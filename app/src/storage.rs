@@ -55,6 +55,9 @@ pub struct Config {
     /// Which monitor to capture: "" = the one under the mouse, "primary", or
     /// a monitor's name (falls back to the mouse when it isn't connected).
     pub capture_monitor: String,
+    /// Freeze the screen at the first click instead of right at the hotkey,
+    /// so the user can still switch windows, desktops or monitors first.
+    pub freeze_on_draw: bool,
     /// AI tools the user chose to connect (ids from `integrations::TOOLS`).
     pub tools: Vec<String>,
 }
@@ -72,6 +75,7 @@ impl Default for Config {
             onboarded: false,
             request_sound: true,
             capture_monitor: String::new(),
+            freeze_on_draw: false,
             tools: vec![],
         }
     }

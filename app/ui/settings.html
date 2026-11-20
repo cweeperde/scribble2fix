@@ -39,6 +39,10 @@
     <div class="label">Pause hotkey in fullscreen apps<small>While a game or fullscreen video is in front, the hotkey goes back to that app.</small></div>
     <label class="switch"><input type="checkbox" id="fullscreen"><span></span></label>
   </div>
+  <div class="row">
+    <div class="label">Freeze when I start drawing<small>The screen stays live after the hotkey, so you can still switch windows, desktops or monitors. Your first click freezes the monitor you click on.</small></div>
+    <label class="switch"><input type="checkbox" id="freeze-on-draw"><span></span></label>
+  </div>
 </section>
 
 <section>
@@ -122,6 +126,7 @@ async function load() {
   $('copy-path').checked = s.copyPath;
   $('simple').checked = s.simpleToolbar;
   $('fullscreen').checked = s.pauseInFullscreen;
+  $('freeze-on-draw').checked = s.freezeOnDraw;
   $('auto-update').checked = s.autoUpdate;
   $('request-sound').checked = s.requestSound;
   renderMonitors(s.monitors, s.captureMonitor);
@@ -176,6 +181,7 @@ $('never-save').onchange = async (e) => {
 $('copy-path').onchange = (e) => invoke('set_copy_path', { on: e.target.checked });
 $('simple').onchange = (e) => invoke('set_simple_toolbar', { on: e.target.checked });
 $('fullscreen').onchange = (e) => invoke('set_pause_in_fullscreen', { on: e.target.checked });
+$('freeze-on-draw').onchange = (e) => invoke('set_freeze_on_draw', { on: e.target.checked });
 $('auto-update').onchange = (e) => invoke('set_auto_update', { on: e.target.checked });
 $('request-sound').onchange = (e) => invoke('set_request_sound', { on: e.target.checked });
 $('monitor').onchange = (e) => invoke('set_capture_monitor', { id: e.target.value });

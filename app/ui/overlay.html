@@ -64,6 +64,10 @@
      the hint pill shows; the first click freezes the screen. */
   html.armed, html.armed body { background: transparent; }
   html.armed #toolbar-pos, html.armed #frame { display: none; }
+  /* The first click was made and the screenshot is being taken: show nothing
+     at all, so the window doesn't end up in it (and the screen doesn't flash
+     black) until the frozen picture is painted. */
+  html.freezing #hint, html.freezing #fg, html.freezing #live { opacity: 0 !important; transition: none !important; }
   @keyframes flash { from { opacity: 0.1; } to { opacity: 0; } }
   @keyframes vignette { 0% { opacity: 0; } 25% { opacity: 1; } 100% { opacity: 0; } }
   @keyframes shine { 0% { opacity: 1; background-position: 100% 0; } 85% { opacity: 1; } 100% { opacity: 0; background-position: 0 0; } }
@@ -293,6 +297,44 @@ const ratio = () => (W && innerWidth ? W / innerWidth : devicePixelRatio);
 // ------------------------------------------------------------ capture lifecycle
 
 let armed = false;           // waiting for the first click; the screen is still live
+let shownAt = 0;             // when the frozen screen came up (0: not up)
+
+// Settings → "Freeze when I start drawing" off (the default): the hotkey
+// froze the screen right away. Paint it, then show the window.
+listen('capture', async ({ payload }) => {
+  armed = false;
+  document.documentElement.classList.remove('armed', 'freezing');
+  reset(payload.request);
+  simple = payload.simple;
+  toolbar.classList.toggle('simple', simple);
+  if (simple) size = DEFAULT_SIZE;
+  W = payload.width; H = payload.height;
+  safeTop = payload.top?.safeTop || 0;
+  document.documentElement.style.setProperty('--safe-top', safeTop + 'px');
+  setFrameNotch(payload.top?.notch);
+  for (const c of [bg, fg, live]) { c.width = W; c.height = H; }
+  const buf = await invoke('frozen_pixels');
+  bgCtx.putImageData(new ImageData(new Uint8ClampedArray(buf), W, H), 0, 0);
+  placeToolbar();
+  updateButtons();
+  // The shutter zoom and vignette center on the mouse (CSS px).
+  const k = ratio();
+  const root = document.documentElement.style;
+  root.setProperty('--cx', payload.cursor[0] / k + 'px'); root.setProperty('--cy', payload.cursor[1] / k + 'px');
+  playIntro(); // starts just before the window appears, so the first frame is already animated
+  await invoke('show_overlay');
+  shownAt = Date.now();
+});
+
+// Left the frozen screen before drawing anything (switched to another
+// desktop, app or monitor): freeze what's in front now instead of keeping
+// the old picture up. Ignored right after it came up, while focus settles.
+addEventListener('blur', () => {
+  if (!shownAt || armed || busy || textInput || current || marks.length) return;
+  if (Date.now() - shownAt < 700) return;
+  shownAt = 0;
+  invoke('refreeze').catch(() => {});
+});
 
 // The hotkey armed the tool: the screen is NOT frozen yet. Show only the hint
 // pill over the live screen; the first click freezes it (see `frozen` below),
@@ -319,13 +361,14 @@ listen('arm', ({ payload }) => {
 // over the live screen and bring up the toolbar.
 listen('frozen', async ({ payload }) => {
   armed = false;
-  document.documentElement.classList.remove('armed');
   W = payload.width; H = payload.height;
   // Fetch the pixels before resizing: the resize clears the canvases, and
   // the stroke from the freezing click must only blink out for a moment.
   const buf = await invoke('frozen_pixels');
   for (const c of [bg, fg, live]) { c.width = W; c.height = H; }
   bgCtx.putImageData(new ImageData(new Uint8ClampedArray(buf), W, H), 0, 0);
+  // Only now the window may cover the live screen.
+  document.documentElement.classList.remove('armed', 'freezing');
   setHint(payload.request);
   placeToolbar();
   redraw(); // marks committed before the freeze (a single click) survive the resize
@@ -336,6 +379,7 @@ listen('frozen', async ({ payload }) => {
   root.setProperty('--cx', payload.cursor[0] / k + 'px'); root.setProperty('--cy', payload.cursor[1] / k + 'px');
   playIntro(); // starts right at the freeze, so it reads as a camera shutter
   await invoke('show_overlay'); // now take the focus, for Enter / Esc / tools
+  shownAt = Date.now();
 });
 
 // Restarts the CSS intro animations (shutter, ring, frame, toolbar).
@@ -350,7 +394,7 @@ function playIntro() {
 // `request`: { client, reason } of an AI tool waiting for this scribble, if any.
 function reset(request) {
   closeTextInput(false);
-  marks = []; undoStack = []; redoStack = []; current = null; busy = false;
+  marks = []; undoStack = []; redoStack = []; current = null; busy = false; shownAt = 0;
   tool = 'pen';
   document.body.classList.remove('outro', 'sending');
   bgCtx.clearRect(0, 0, bg.width, bg.height);
@@ -441,11 +485,15 @@ live.addEventListener('pointerdown', (e) => {
   if (e.button !== 0) return;
   if (armed) {
     // The first click freezes the screen, and this very drag becomes the
-    // first stroke: it is already being drawn while the screenshot is taken.
+    // first stroke. Until the screenshot is painted the window stays fully
+    // see-through (the stroke is drawn, just not shown), and the screenshot
+    // waits two frames so the hint is gone from the screen.
     armed = false;
-    document.documentElement.classList.remove('armed');
+    document.documentElement.classList.add('freezing');
     hint.classList.add('hidden');
-    invoke('freeze_now').catch(() => {});
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      invoke('freeze_now').catch(() => document.documentElement.classList.remove('freezing'));
+    }));
   }
   if (textInput) { closeTextInput(true); return; }
   hint.classList.add('hidden');

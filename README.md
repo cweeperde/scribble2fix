@@ -43,7 +43,7 @@ Describing UI changes in words is slow: *"the button, no, the other one, under t
 <td width="50%" valign="top">
 
 **Works on anything you can see**<br>
-Websites, desktop apps, design mockups, error dialogs. The screen freezes the moment you start drawing, so menus and hover states stay put while you draw.
+Websites, desktop apps, design mockups, error dialogs. The screen freezes, so menus and hover states stay put while you draw.
 
 </td>
 <td width="50%" valign="top">
@@ -77,7 +77,7 @@ Opens in a blink, lives in the tray, and nothing leaves your computer unless you
 
 ### 1 · Press `F6`
 
-Nothing freezes yet: the screen stays live, so switch to the window or desktop you want to mark up first. Your first click starts drawing and freezes the screen right there. Press `F6` again to cancel. On a Mac it's `⌘⇧2`.
+The screen freezes and the toolbar appears. On a Mac it's `⌘⇧2`.
 
 </td>
 <td width="33%" align="center" valign="top">
@@ -236,6 +236,7 @@ A short welcome explains the basics, lets you pick your hotkey and connects the 
 
 - **Hotkey**, **start at login**, **simple toolbar**
 - **Pause in fullscreen apps**, so games keep their F6
+- **Freeze when I start drawing**: the screen stays live after the hotkey, so you can still switch windows, desktops or monitors, and your first click freezes it
 - **AI tools**: connect or disconnect each one
 - **Captures**: how many to keep, never save images, or copy the file path instead of the image
 - **Automatic updates**, and **Show welcome again** under About

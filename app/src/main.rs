@@ -369,7 +369,8 @@ fn start_capture(app: &AppHandle) {
     if state.active.swap(true, Ordering::SeqCst) {
         return;
     }
-    state.armed.store(true, Ordering::SeqCst);
+    let on_draw = config(app).freeze_on_draw;
+    state.armed.store(on_draw, Ordering::SeqCst);
     if !macos::check_screen_access() {
         show_toast(
             app,
@@ -381,7 +382,12 @@ fn start_capture(app: &AppHandle) {
     }
     let app = app.clone();
     thread::spawn(move || {
-        if let Err(e) = arm(&app) {
+        let result = if on_draw {
+            arm(&app)
+        } else {
+            prepare(&app, target_monitor(&app)).and_then(|_| capture(&app, "capture"))
+        };
+        if let Err(e) = result {
             let state = app.state::<AppState>();
             state.armed.store(false, Ordering::SeqCst);
             state.active.store(false, Ordering::SeqCst);
@@ -390,12 +396,9 @@ fn start_capture(app: &AppHandle) {
     });
 }
 
-/// Arm a capture: remember the app in front and show the (transparent)
-/// overlay without freezing anything. The screen is frozen when the user
-/// starts drawing (`freeze_now`), so they can still switch windows or
-/// desktops after pressing the hotkey. Keyboard focus stays where it is.
-fn arm(app: &AppHandle) -> Result<(), String> {
-    let state = app.state::<AppState>();
+/// Remembers the app in front (to name it and to hand the focus back) and
+/// the monitor to capture.
+fn prepare(app: &AppHandle, monitor: Option<tauri::Monitor>) -> Result<Area, String> {
     let (app_name, window_title) = match active_win_pos_rs::get_active_window() {
         Ok(w) => {
             macos::remember_front_app(w.process_id);
@@ -404,12 +407,17 @@ fn arm(app: &AppHandle) -> Result<(), String> {
         Err(_) => Default::default(),
     };
     {
+        let state = app.state::<AppState>();
         let mut source = state.source.lock().unwrap();
         source.app_name = app_name;
         source.window_title = window_title;
     }
+    Ok(set_area(app, &monitor.ok_or("no monitor found")?))
+}
 
-    let monitor = target_monitor(app).ok_or("no monitor found")?;
+/// Makes `monitor` the one that gets frozen.
+fn set_area(app: &AppHandle, monitor: &tauri::Monitor) -> Area {
+    let state = app.state::<AppState>();
     let area = Area {
         x: monitor.position().x,
         y: monitor.position().y,
@@ -426,12 +434,45 @@ fn arm(app: &AppHandle) -> Result<(), String> {
         height: area.height,
         scale: area.scale,
     };
+    area
+}
 
-    // Cancelled (hotkey pressed again) while preparing: show nothing.
-    if !state.armed.load(Ordering::SeqCst) {
+/// "Freeze when I start drawing": shows the (transparent) overlay over the
+/// live screen without freezing anything. It moves along to the monitor
+/// under the mouse, and the first click freezes that one (`freeze_now`), so
+/// the user can still switch windows, desktops or monitors after the hotkey.
+/// Keyboard focus stays where it is.
+fn arm(app: &AppHandle) -> Result<(), String> {
+    let monitor = cursor_monitor(app).or_else(|| app.primary_monitor().ok().flatten());
+    let area = prepare(app, monitor)?;
+    show_armed(app, area)?;
+    let app = app.clone();
+    thread::spawn(move || loop {
+        thread::sleep(Duration::from_millis(120));
+        let state = app.state::<AppState>();
+        // `freeze_now` takes the same lock, so the overlay can't move to
+        // another monitor while the screen is being frozen.
+        let area = state.area.lock().unwrap();
+        if !state.armed.load(Ordering::SeqCst) {
+            return;
+        }
+        let Some(m) = cursor_monitor(&app) else { continue };
+        if area.is_some_and(|a| a.x == m.position().x && a.y == m.position().y) {
+            continue;
+        }
+        drop(area);
+        let moved = set_area(&app, &m);
+        let _ = show_armed(&app, moved);
+    });
+    Ok(())
+}
+
+/// Puts the armed overlay over `area` and tells the page about it.
+fn show_armed(app: &AppHandle, area: Area) -> Result<(), String> {
+    // Cancelled (hotkey pressed again) in the meantime: show nothing.
+    if !app.state::<AppState>().armed.load(Ordering::SeqCst) {
         return Ok(());
     }
-
     let overlay = app.get_webview_window("overlay").ok_or("overlay missing")?;
     overlay
         .set_position(PhysicalPosition::new(area.x, area.y))
@@ -499,11 +540,11 @@ fn target_monitor(app: &AppHandle) -> Option<tauri::Monitor> {
         .or_else(|| app.primary_monitor().ok().flatten())
 }
 
-/// Freeze the monitor chosen when the hotkey was pressed: capture it now and
-/// hand the screenshot to the armed overlay, which paints it over the live
-/// screen. Runs when the user starts drawing (the first click), so anything
-/// they changed in between (window, desktop) is what gets frozen.
-fn capture(app: &AppHandle) -> Result<(), String> {
+/// Freezes the chosen monitor (`set_area`) and hands the screenshot to the
+/// overlay: as `capture` to the hidden overlay, which shows itself once it's
+/// painted, or as `frozen` to the armed one, which paints it over the live
+/// screen.
+fn capture(app: &AppHandle, event: &str) -> Result<(), String> {
     let state = app.state::<AppState>();
     let unix_ms = chrono::Utc::now().timestamp_millis();
     let area = (*state.area.lock().unwrap()).ok_or("no capture area")?;
@@ -520,7 +561,7 @@ fn capture(app: &AppHandle) -> Result<(), String> {
 
     *state.pixels.lock().unwrap() = Some(shot.into_raw());
     // For naming the app the marks end up on. Not needed until the user is
-    // done, so it doesn't hold up the freeze.
+    // done, so it doesn't hold up the overlay.
     state.windows.lock().unwrap().clear();
     let handle = app.clone();
     thread::spawn(move || {
@@ -529,17 +570,27 @@ fn capture(app: &AppHandle) -> Result<(), String> {
     state.source.lock().unwrap().unix_ms = unix_ms;
 
     let overlay = app.get_webview_window("overlay").ok_or("overlay missing")?;
+    overlay
+        .set_position(PhysicalPosition::new(area.x, area.y))
+        .map_err(err)?;
+    overlay
+        .set_size(PhysicalSize::new(area.width, area.height))
+        .map_err(err)?;
 
     #[derive(Serialize, Clone)]
     #[serde(rename_all = "camelCase")]
-    struct FrozenPayload {
+    struct Payload {
         width: u32,
         height: u32,
         /// Shown at the top while an AI tool waits for this scribble.
         request: Option<RequestInfo>,
+        /// Only the basic tools in the toolbar.
+        simple: bool,
         /// Mouse position on the captured monitor (physical px), where the
         /// intro animation starts; the center if the mouse is elsewhere.
         cursor: (f64, f64),
+        /// The camera notch (macOS), which the toolbar and frame avoid.
+        top: ScreenTop,
     }
     let cursor = app
         .cursor_position()
@@ -553,8 +604,15 @@ fn capture(app: &AppHandle) -> Result<(), String> {
     });
     overlay
         .emit(
-            "frozen",
-            FrozenPayload { width, height, request, cursor },
+            event,
+            Payload {
+                width,
+                height,
+                request,
+                simple: config(app).simple_toolbar,
+                cursor,
+                top: macos::screen_top(app, area.x as f64 / area.scale, area.width as f64 / area.scale),
+            },
         )
         .map_err(err)
 }
@@ -592,6 +650,7 @@ fn frozen_pixels(state: State<AppState>) -> Result<tauri::ipc::Response, String>
 
 #[tauri::command]
 fn show_overlay(window: WebviewWindow) -> Result<(), String> {
+    move_to_current_desktop(&window);
     window.show().map_err(err)?;
     if cfg!(target_os = "macos") {
         macos::above_menu_bar(&window);
@@ -627,15 +686,18 @@ fn show_overlay_armed(window: WebviewWindow) -> Result<(), String> {
 /// The user started drawing on the armed overlay: freeze the screen now.
 #[tauri::command]
 async fn freeze_now(app: AppHandle) -> Result<(), String> {
-    if !app
-        .state::<AppState>()
-        .armed
-        .swap(false, Ordering::SeqCst)
     {
-        return Err("not armed".into());
+        // The area lock keeps the overlay from following the mouse to
+        // another monitor right now (see `arm`).
+        let state = app.state::<AppState>();
+        let _area = state.area.lock().unwrap();
+        if !state.armed.swap(false, Ordering::SeqCst) {
+            return Err("not armed".into());
+        }
     }
     let handle = app.clone();
-    let result: Result<(), String> = tauri::async_runtime::spawn_blocking(move || capture(&handle))
+    let result: Result<(), String> =
+        tauri::async_runtime::spawn_blocking(move || capture(&handle, "frozen"))
         .await
         .unwrap_or_else(|e| Err(err(e)));
     let Err(e) = result else {
@@ -650,6 +712,37 @@ async fn freeze_now(app: AppHandle) -> Result<(), String> {
     }
     show_toast(&app, &format!("Capture failed: {e}"));
     Err(e)
+}
+
+/// The user left the frozen screen before drawing anything: switched to
+/// another desktop (Space), app or monitor. Freeze what they look at now
+/// instead of keeping the old picture up.
+#[tauri::command]
+async fn refreeze(app: AppHandle, window: WebviewWindow) -> Result<(), String> {
+    let state = app.state::<AppState>();
+    if !state.active.load(Ordering::SeqCst) || state.armed.load(Ordering::SeqCst) {
+        return Ok(());
+    }
+    // Out of the way, so the new screen gets captured. Without handing the
+    // focus back: on macOS that would switch back to the old Space.
+    let _ = window.set_always_on_top(false);
+    window.hide().map_err(err)?;
+    let handle = app.clone();
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        // Let the desktop switch animation finish.
+        thread::sleep(Duration::from_millis(450));
+        prepare(&handle, target_monitor(&handle)).and_then(|_| capture(&handle, "capture"))
+    })
+    .await
+    .unwrap_or_else(|e| Err(err(e)));
+    if let Err(e) = result {
+        app.state::<AppState>()
+            .active
+            .store(false, Ordering::SeqCst);
+        show_toast(&app, &format!("Capture failed: {e}"));
+        return Err(e);
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -929,9 +1022,45 @@ fn show_toast_for(app: &AppHandle, text: &str, ms: u64) {
 /// appear (the user is typing or about to paste somewhere). On Windows,
 /// `show()` activates the window whenever the process is allowed to (e.g.
 /// right after launch), so show it without activation.
+/// Windows: a window belongs to the virtual desktop it was created on. Shown
+/// on another one it stays invisible there, and focusing it switches back to
+/// its own desktop. So before showing one, move it to the desktop of the
+/// window in front.
+#[cfg(windows)]
+fn move_to_current_desktop(window: &WebviewWindow) {
+    use windows::Win32::Foundation::HWND;
+    use windows::Win32::System::Com::{
+        CoCreateInstance, CoInitializeEx, CLSCTX_ALL, COINIT_APARTMENTTHREADED,
+    };
+    use windows::Win32::UI::Shell::{IVirtualDesktopManager, VirtualDesktopManager};
+    use windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow;
+    let Ok(hwnd) = window.hwnd() else { return };
+    let hwnd = HWND(hwnd.0 as _);
+    unsafe {
+        let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
+        let Ok(manager) =
+            CoCreateInstance::<_, IVirtualDesktopManager>(&VirtualDesktopManager, None, CLSCTX_ALL)
+        else {
+            return;
+        };
+        if manager.IsWindowOnCurrentVirtualDesktop(hwnd).is_ok_and(|on| on.as_bool()) {
+            return;
+        }
+        if let Ok(desktop) = manager.GetWindowDesktopId(GetForegroundWindow()) {
+            let _ = manager.MoveWindowToDesktop(hwnd, &desktop);
+        }
+    }
+}
+
+#[cfg(not(windows))]
+fn move_to_current_desktop(_window: &WebviewWindow) {}
+
 #[cfg(windows)]
 fn set_visible_no_activate(window: &WebviewWindow, visible: bool) {
     use windows_sys::Win32::UI::WindowsAndMessaging::{ShowWindow, SW_HIDE, SW_SHOWNOACTIVATE};
+    if visible {
+        move_to_current_desktop(window);
+    }
     if let Ok(hwnd) = window.hwnd() {
         unsafe {
             ShowWindow(
@@ -1090,6 +1219,7 @@ struct Settings {
     pause_in_fullscreen: bool,
     request_sound: bool,
     capture_monitor: String,
+    freeze_on_draw: bool,
     monitors: Vec<MonitorChoice>,
     version: &'static str,
     tools: Vec<integrations::ToolStatus>,
@@ -1142,6 +1272,7 @@ fn get_settings(app: AppHandle) -> Settings {
         pause_in_fullscreen: config.pause_in_fullscreen,
         request_sound: config.request_sound,
         capture_monitor: config.capture_monitor.clone(),
+        freeze_on_draw: config.freeze_on_draw,
         monitors: monitor_choices(&app),
         version: env!("CARGO_PKG_VERSION"),
         tools: integrations::status(&config),
@@ -1225,6 +1356,12 @@ fn set_request_sound(app: AppHandle, on: bool) -> Result<(), String> {
 #[tauri::command]
 fn set_capture_monitor(app: AppHandle, id: String) -> Result<(), String> {
     update_config(&app, |c| c.capture_monitor = id)?;
+    Ok(())
+}
+
+#[tauri::command]
+fn set_freeze_on_draw(app: AppHandle, on: bool) -> Result<(), String> {
+    update_config(&app, |c| c.freeze_on_draw = on)?;
     Ok(())
 }
 
@@ -1630,6 +1767,8 @@ fn main() {
             show_overlay,
             show_overlay_armed,
             freeze_now,
+            refreeze,
+            set_freeze_on_draw,
             hide_overlay,
             overlay_loaded,
             cancel_capture,
