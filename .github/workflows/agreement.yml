@@ -1,18 +1,13 @@
 name: Contributor agreement
 
 # Every pull request needs the contributor agreement (CONTRIBUTING.md): the
-# author either signed it once for all contributions (listed in
-# .github/contributor-agreement.md on main), or ticks the box in the pull
-# request. A ruleset makes this check required before merging into main.
-#
-# The list is read from main, not from the pull request, so nobody can sign
-# for themselves inside the pull request they want merged.
+# author ticks the box in the pull request description. A ruleset makes this
+# check required before merging into main.
 on:
   pull_request:
     types: [opened, edited, reopened, synchronize]
 
-permissions:
-  contents: read
+permissions: {}
 
 jobs:
   agreement:
@@ -21,19 +16,12 @@ jobs:
     steps:
       - name: Check the agreement
         env:
-          GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           AUTHOR: ${{ github.event.pull_request.user.login }}
           BODY: ${{ github.event.pull_request.body }}
         run: |
           if [ "$AUTHOR" = "${REPO%%/*}" ]; then
             echo "The owner's own pull request."
-            exit 0
-          fi
-          signed=$(gh api "repos/$REPO/contents/.github/contributor-agreement.md?ref=main" \
-            -H "Accept: application/vnd.github.raw" 2>/dev/null || true)
-          if printf '%s\n' "$signed" | grep -qiE "^- @${AUTHOR}[ ,]"; then
-            echo "@$AUTHOR signed the agreement for all contributions."
             exit 0
           fi
           if printf '%s\n' "$BODY" | grep -qiE '^\s*- \[x\] I have read the \[contributor agreement\]'; then

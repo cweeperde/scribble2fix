@@ -9,7 +9,7 @@ Thanks for helping! Bug reports and ideas are welcome as [issues](https://github
 3. Make your change and test it on your platform. Keep pull requests focused on one thing.
 4. Open a pull request against `main` and tick the agreement in the template. A check blocks the merge until you do.
 
-The maintainers review, merge and release. Maintainers with write access may also push to `main` and create release tags; they sign the agreement once for all their contributions (see below).
+The maintainers review, merge and release.
 
 ## Building locally
 
@@ -37,7 +37,3 @@ By opening a pull request or otherwise submitting a contribution (code, document
 6. **Moral rights.** As far as the law allows, you agree not to assert moral rights (such as the right to be named or to object to changes) against cweeper or anyone licensed by them. You may still be credited in the commit history.
 
 If you can't agree to this, please open an issue describing the change instead of sending code.
-
-### Signing once for all contributions
-
-If you contribute regularly, or have write access and push without pull requests, sign the agreement once for all your past and future contributions: add your line to [.github/contributor-agreement.md](.github/contributor-agreement.md) yourself, from your own GitHub account. After that the pull request check passes for you without the box.
