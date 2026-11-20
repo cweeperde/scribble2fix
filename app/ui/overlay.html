@@ -60,14 +60,20 @@
 
   /* ---------------- armed (hotkey pressed, not yet drawing)
      The overlay is see-through: the screen stays live, keyboard focus stays
-     with the user's app and they can still switch windows or desktops. Only
-     the hint pill shows; the first click freezes the screen. */
+     with the user's app and they can still switch windows or desktops. The
+     frame, toolbar and hint show, so tools and colors can be picked first;
+     the first click on the screen freezes it. */
   html.armed, html.armed body { background: transparent; }
-  html.armed #toolbar-pos, html.armed #frame { display: none; }
+  /* No camera shutter over the live screen: only frame and toolbar come in. */
+  html.armed body.intro #stage, html.armed body.intro #flash, html.armed body.intro #vignette,
+  html.armed body.intro #shine { animation: none; }
+  /* At the freeze the shutter plays, but frame and toolbar are already up. */
+  html.drawn body.intro #frame, html.drawn body.intro #glow, html.drawn body.intro #toolbar,
+  html.drawn body.intro #toolbar > * { animation: none; }
   /* The first click was made and the screenshot is being taken: show nothing
      at all, so the window doesn't end up in it (and the screen doesn't flash
      black) until the frozen picture is painted. */
-  html.freezing #hint, html.freezing #fg, html.freezing #live { opacity: 0 !important; transition: none !important; }
+  html.freezing body > * { opacity: 0 !important; transition: none !important; animation: none !important; }
   @keyframes flash { from { opacity: 0.1; } to { opacity: 0; } }
   @keyframes vignette { 0% { opacity: 0; } 25% { opacity: 1; } 100% { opacity: 0; } }
   @keyframes shine { 0% { opacity: 1; background-position: 100% 0; } 85% { opacity: 1; } 100% { opacity: 0; background-position: 0 0; } }
@@ -303,7 +309,7 @@ let shownAt = 0;             // when the frozen screen came up (0: not up)
 // froze the screen right away. Paint it, then show the window.
 listen('capture', async ({ payload }) => {
   armed = false;
-  document.documentElement.classList.remove('armed', 'freezing');
+  document.documentElement.classList.remove('armed', 'freezing', 'drawn');
   reset(payload.request);
   simple = payload.simple;
   toolbar.classList.toggle('simple', simple);
@@ -344,11 +350,16 @@ listen('left', leftScreen);
 // pill over the live screen; the first click freezes it (see `frozen` below),
 // so the user can still switch windows or desktops first.
 listen('arm', ({ payload }) => {
+  // Sent again when the overlay follows the mouse to another monitor: keep
+  // the tool, color and toolbar position picked so far.
+  const first = !armed;
   armed = true;
-  simple = payload.simple;
-  toolbar.classList.toggle('simple', simple);
-  if (simple) size = DEFAULT_SIZE;
-  reset(payload.request);
+  if (first) {
+    simple = payload.simple;
+    toolbar.classList.toggle('simple', simple);
+    if (simple) size = DEFAULT_SIZE;
+    reset(payload.request);
+  }
   W = payload.width; H = payload.height;
   safeTop = payload.top?.safeTop || 0;
   document.documentElement.style.setProperty('--safe-top', safeTop + 'px');
@@ -356,6 +367,11 @@ listen('arm', ({ payload }) => {
   for (const c of [bg, fg, live]) { c.width = W; c.height = H; }
   setArmedHint(payload.cancelKey);
   document.documentElement.classList.add('armed');
+  if (first) {
+    document.documentElement.classList.remove('drawn');
+    placeToolbar();
+    playIntro();
+  }
   updateButtons();
   invoke('show_overlay_armed');
 });
@@ -373,8 +389,8 @@ listen('frozen', async ({ payload }) => {
   bgCtx.putImageData(new ImageData(new Uint8ClampedArray(buf), W, H), 0, 0);
   // Only now the window may cover the live screen.
   document.documentElement.classList.remove('armed', 'freezing');
+  document.documentElement.classList.add('drawn');
   setHint(payload.request);
-  placeToolbar();
   redraw(); // marks committed before the freeze (a single click) survive the resize
   renderLive(); // and the stroke still in flight from the freezing click
   // The shutter zoom and vignette center on the mouse (CSS px).
