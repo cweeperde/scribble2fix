@@ -1,6 +1,6 @@
 [package]
 name = "scribble2fix"
-version = "1.1.4"
+version = "1.1.5"
 edition = "2021"
 description = "Mark up your screen and hand it to an AI coding tool"
 license-file = "../LICENSE"
