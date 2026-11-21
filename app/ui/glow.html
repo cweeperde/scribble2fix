@@ -20,9 +20,17 @@
 <script src="guard.js"></script>
 <script src="frame.js"></script>
 <script>
-window.__TAURI__.event.listen('notch', ({ payload }) => setFrameNotch(payload));
-window.__TAURI__.event.listen('glow', ({ payload }) => {
+const tauri = window.__TAURI__;
+tauri.event.listen('notch', ({ payload }) => setFrameNotch(payload));
+tauri.event.listen('glow', ({ payload }) => {
   document.body.classList.toggle('on', payload === true);
+});
+// This page may load after `show_request` already emitted the events (a
+// first request that arrives right at launch): pull the current state
+// instead of waiting for events that may never come.
+tauri.core.invoke('glow_ready').then(({ on, notch }) => {
+  setFrameNotch(notch);
+  document.body.classList.toggle('on', on);
 });
 </script>
 </body>
