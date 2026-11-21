@@ -617,10 +617,7 @@ function drawVeil(ctx, s) {
   ctx.beginPath();
   ctx.roundRect(x, y, w, h, r);
   ctx.clip();
-  ctx.filter = `blur(${Math.round(12 * k)}px)`;
-  const m = 24 * k; // blur from a bit around it, so the edges don't fade out
-  ctx.drawImage(bg, x - m, y - m, w + 2 * m, h + 2 * m, x - m, y - m, w + 2 * m, h + 2 * m);
-  ctx.filter = 'none';
+  drawBlurred(ctx, x, y, w, h, k);
   ctx.fillStyle = 'rgba(20, 20, 24, 0.35)';
   ctx.fillRect(x, y, w, h);
   ctx.restore();
@@ -632,6 +629,26 @@ function drawVeil(ctx, s) {
   ctx.stroke();
   ctx.setLineDash([]);
   drawHiddenLabel(ctx, x, y, w, h, 'rgba(255, 255, 255, 0.9)');
+}
+
+// Frosted glass without `ctx.filter`, which WebKit (macOS) doesn't support:
+// the area is squeezed down and drawn back up, and the canvas smoothing does
+// the blurring. It samples from a margin around the area, so the edges don't
+// fade out.
+let veilScratch;
+function drawBlurred(ctx, x, y, w, h, k) {
+  const m = 24 * k, f = Math.round(10 * k); // margin around it; downscale = blur strength
+  const sx = x - m, sy = y - m, sw = w + 2 * m, sh = h + 2 * m;
+  if (!veilScratch) veilScratch = document.createElement('canvas');
+  veilScratch.width = Math.max(1, Math.round(sw / f));
+  veilScratch.height = Math.max(1, Math.round(sh / f));
+  const sctx = veilScratch.getContext('2d');
+  sctx.imageSmoothingEnabled = true;
+  sctx.imageSmoothingQuality = 'high';
+  sctx.drawImage(bg, sx, sy, sw, sh, 0, 0, veilScratch.width, veilScratch.height);
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(veilScratch, 0, 0, veilScratch.width, veilScratch.height, sx, sy, sw, sh);
 }
 
 // "Hidden" in the middle of an area, if it fits.
