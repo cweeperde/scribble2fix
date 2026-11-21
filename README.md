@@ -332,8 +332,7 @@ Personal and other noncommercial use is free. For use at work or in a company, [
 
 ## Feedback
 
-Found a bug or have an idea? [Open an issue](https://github.com/cweeperde/scribble2fix/issues/new/choose). Something that could expose private data? Please [report it privately](SECURITY.md). What changed in each version: [CHANGELOG.md](CHANGELOG.md). What's planned: the [project board](https://github.com/users/cweeperde/projects/1).
-
+Found a bug or have an idea? [Open an issue](https://github.com/cweeperde/scribble2fix/issues/new/choose). Something that could expose private data? Please [report it privately](SECURITY.md). What changed in each version: [CHANGELOG.md](CHANGELOG.md).
 If Scribble2Fix saves you time, a ⭐ helps others find it.
 
 ## License
