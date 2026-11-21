@@ -7,7 +7,6 @@
 ### Scribble on your screen to show your AI what to change.
 
 [![Latest release](https://img.shields.io/github/v/release/cweeperde/scribble2fix?style=flat-square&label=release&color=0a84ff)](https://github.com/cweeperde/scribble2fix/releases/latest)
-[![Visits](https://hits.sh/github.com/cweeperde/scribble2fix.svg?style=flat-square&label=visits&view=total&color=34c759)](https://hits.sh/github.com/cweeperde/scribble2fix/)
 [![Stars](https://img.shields.io/github/stars/cweeperde/scribble2fix?style=flat-square&color=f5b301)](https://github.com/cweeperde/scribble2fix/stargazers)
 [![License: PolyForm Strict](https://img.shields.io/badge/license-PolyForm%20Strict-ff3b30?style=flat-square)](#license)
 
