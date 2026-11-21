@@ -1,0 +1,13 @@
+name: Todo (maintainers)
+description: A task or note for the people working on Scribble2Fix. For bugs and ideas, please use the templates above.
+labels: [todo]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What needs doing?
+      description: A sentence is enough. Add a checklist if it has several steps.
+      placeholder: |
+        - [ ] ...
+    validations:
+      required: true
