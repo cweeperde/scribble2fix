@@ -1290,26 +1290,17 @@ fn set_visible_no_activate(window: &WebviewWindow, visible: bool) {
 /// its shadow and entrance animation).
 const REQUEST_SIZE: (f64, f64) = (520.0, 210.0);
 
-/// An AI tool asked for a scribble (`scribble2fix --request`, sent by the MCP
-/// server): a card at the top of the screen and a glowing frame around it
-/// stay up until the user answers, the request expires or it's answered or
-/// cancelled elsewhere.
-fn show_request(app: &AppHandle) {
-    let Some(request) = storage::read_request() else {
-        return;
-    };
-    let (Some(card), Some(glow), Some(monitor)) = (
-        app.get_webview_window("request"),
-        app.get_webview_window("glow"),
-        target_monitor(app),
-    ) else {
-        return;
-    };
+/// Where the request card and the glow frame go on the target monitor, in
+/// physical pixels: (glow frame, request card, scale factor). The frame goes
+/// around the whole screen on macOS, above the menu bar and around the camera
+/// notch (it's click-through). Elsewhere it leaves out the taskbar, so
+/// Windows doesn't treat it as a fullscreen window.
+fn request_layout(
+    app: &AppHandle,
+) -> Option<(tauri::PhysicalRect<i32, u32>, tauri::PhysicalRect<i32, u32>, f64)> {
+    let monitor = target_monitor(app)?;
     // The work area leaves out the taskbar / dock / menu bar.
     let work = *monitor.work_area();
-    // On macOS the frame goes around the whole screen, above the menu bar and
-    // around the camera notch (it's click-through). On Windows it leaves out
-    // the taskbar, so Windows doesn't treat it as a fullscreen window.
     let frame = if cfg!(target_os = "macos") {
         tauri::PhysicalRect { position: *monitor.position(), size: *monitor.size() }
     } else {
@@ -1321,8 +1312,32 @@ fn show_request(app: &AppHandle) {
         (REQUEST_SIZE.1 * scale) as u32,
     );
     let x = work.position.x + (work.size.width.saturating_sub(w) / 2) as i32;
-    let _ = card.set_position(PhysicalPosition::new(x, work.position.y));
-    let _ = card.set_size(PhysicalSize::new(w, h));
+    let card = tauri::PhysicalRect {
+        position: PhysicalPosition::new(x, work.position.y),
+        size: PhysicalSize::new(w, h),
+    };
+    Some((frame, card, scale))
+}
+
+/// An AI tool asked for a scribble (`scribble2fix --request`, sent by the MCP
+/// server): a card at the top of the screen and a glowing frame around it
+/// stay up until the user answers, the request expires or it's answered or
+/// cancelled elsewhere.
+fn show_request(app: &AppHandle) {
+    let Some(request) = storage::read_request() else {
+        return;
+    };
+    let (Some(card), Some(glow)) = (
+        app.get_webview_window("request"),
+        app.get_webview_window("glow"),
+    ) else {
+        return;
+    };
+    let Some((frame, card_rect, scale)) = request_layout(app) else {
+        return;
+    };
+    let _ = card.set_position(card_rect.position);
+    let _ = card.set_size(card_rect.size);
     let _ = glow.set_position(frame.position);
     let _ = glow.set_size(frame.size);
     let top = macos::screen_top(app, frame.position.x as f64 / scale, frame.size.width as f64 / scale);
@@ -1403,6 +1418,49 @@ fn request_decline(app: AppHandle) {
     if let Some(request) = storage::answer_request(None) {
         show_toast(&app, &format!("Declined. {} was told", request.client));
     }
+}
+
+/// The request card page (re)loaded: replays what `show_request` already
+/// emitted, for a page that loads after the event (a first request that
+/// arrives right at launch). Nothing to show → `request: null`, the card
+/// stays hidden.
+#[tauri::command]
+fn request_ready(window: WebviewWindow, app: AppHandle) -> serde_json::Value {
+    let request = (window.is_visible().unwrap_or(false))
+        .then(|| storage::read_request())
+        .flatten();
+    match request {
+        Some(request) => {
+            let config = config(&app);
+            serde_json::json!({
+                "request": {
+                    "id": request.id,
+                    "client": request.client,
+                    "reason": request.reason,
+                    "hotkey": config.hotkey,
+                    "expiresAt": request.created_unix_ms + storage::REQUEST_TTL_MS,
+                    "sound": config.request_sound,
+                }
+            })
+        }
+        None => serde_json::json!({ "request": null }),
+    }
+}
+
+/// The glow page (re)loaded: is a request up, and where is the camera notch?
+/// A page that loads after `show_request` misses the `glow` and `notch`
+/// events. The notch is read from the glow window's own frame, so it's
+/// correct wherever the frame currently is.
+#[tauri::command]
+fn glow_ready(window: WebviewWindow, app: AppHandle) -> serde_json::Value {
+    let on = window.is_visible().unwrap_or(false);
+    let notch = match (window.outer_position(), window.outer_size(), window.scale_factor()) {
+        (Ok(pos), Ok(size), Ok(scale)) => {
+            macos::screen_top(&app, pos.x as f64 / scale, size.width as f64 / scale).notch
+        }
+        _ => None,
+    };
+    serde_json::json!({ "on": on, "notch": notch })
 }
 
 // ---------------------------------------------------------------- hotkey & settings
@@ -1827,7 +1885,12 @@ fn create_windows(app: &AppHandle) -> tauri::Result<()> {
     // as a fullscreen window).
     // Never takes keyboard focus (the user may be typing), but its buttons
     // take the first click.
-    WebviewWindowBuilder::new(app, "request", WebviewUrl::App("request.html".into()))
+    // They start on the monitor a request would go to. A window that is moved
+    // to its place only after creation may keep its initial size and place
+    // (issue #5: on the first request after launch, the frame page drew its
+    // border around half of the screen).
+    let layout = can_place_windows().then(|| request_layout(app)).flatten();
+    let mut request = WebviewWindowBuilder::new(app, "request", WebviewUrl::App("request.html".into()))
         .title("Scribble2Fix")
         .inner_size(REQUEST_SIZE.0, REQUEST_SIZE.1)
         .visible(false)
@@ -1839,9 +1902,8 @@ fn create_windows(app: &AppHandle) -> tauri::Result<()> {
         .always_on_top(true)
         .focused(false)
         .focusable(false)
-        .accept_first_mouse(true)
-        .build()?;
-    let glow = WebviewWindowBuilder::new(app, "glow", WebviewUrl::App("glow.html".into()))
+        .accept_first_mouse(true);
+    let mut glow_builder = WebviewWindowBuilder::new(app, "glow", WebviewUrl::App("glow.html".into()))
         .title("Scribble2Fix")
         .visible(false)
         .decorations(false)
@@ -1851,8 +1913,15 @@ fn create_windows(app: &AppHandle) -> tauri::Result<()> {
         .skip_taskbar(true)
         .always_on_top(true)
         .focused(false)
-        .focusable(false)
-        .build()?;
+        .focusable(false);
+    if let Some((frame, card, scale)) = layout {
+        request = request.position(card.position.x as f64 / scale, card.position.y as f64 / scale);
+        glow_builder = glow_builder
+            .position(frame.position.x as f64 / scale, frame.position.y as f64 / scale)
+            .inner_size(frame.size.width as f64 / scale, frame.size.height as f64 / scale);
+    }
+    request.build()?;
+    let glow = glow_builder.build()?;
     glow.set_ignore_cursor_events(true)?;
     for label in ["overlay", "toast", "request", "glow"] {
         if let Some(window) = app.get_webview_window(label) {
@@ -1982,6 +2051,8 @@ fn main() {
             update_now,
             request_draw,
             request_decline,
+            request_ready,
+            glow_ready,
             set_request_sound,
             set_capture_monitor,
         ])
@@ -1991,12 +2062,16 @@ fn main() {
 
             storage::hold_app_lock();
             let handle = app.handle();
+
+            // Before the windows: `create_windows` places the request card and
+            // the glow frame on the monitor from this config.
+            let config = storage::load_config();
+            *app.state::<AppState>().config.lock().unwrap() = config.clone();
+
             create_windows(handle)?;
             macos::watch_spaces();
             create_tray(handle)?;
 
-            let config = storage::load_config();
-            *app.state::<AppState>().config.lock().unwrap() = config.clone();
             let request = std::env::args().any(|a| a == "--request");
 
             if !config.onboarded {

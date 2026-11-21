@@ -137,7 +137,7 @@ function tick() {
   $('fill').style.transform = `scaleX(${ms / total})`;
 }
 
-window.__TAURI__.event.listen('request', ({ payload }) => {
+function showRequest(payload) {
   $('title').textContent = `${payload.client} asks you to show it:`;
   $('reason').textContent = payload.reason;
   $('key').textContent = prettyHotkey(payload.hotkey);
@@ -155,7 +155,13 @@ window.__TAURI__.event.listen('request', ({ payload }) => {
   }
   document.body.classList.remove('off');
   document.body.classList.add('on');
-});
+}
+
+window.__TAURI__.event.listen('request', ({ payload }) => showRequest(payload));
+// This page may load after `show_request` already emitted the event (a first
+// request that arrives right at launch): pull the current request instead of
+// waiting for events that may never come.
+invoke('request_ready').then(({ request }) => { if (request) showRequest(request); });
 
 let answered = false;
 async function answer(command) {
