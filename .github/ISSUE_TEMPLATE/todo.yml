@@ -5,7 +5,7 @@ body:
   - type: textarea
     id: what
     attributes:
-      label: What needs doing?
+      label: Todo
       description: A sentence is enough. Add a checklist if it has several steps.
       placeholder: |
         - [ ] ...
