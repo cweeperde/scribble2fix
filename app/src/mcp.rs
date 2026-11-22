@@ -481,3 +481,154 @@ fn describe_age(minutes: i64) -> String {
 fn text_result(text: &str, is_error: bool) -> Value {
     json!({ "content": [{ "type": "text", "text": text }], "isError": is_error })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{capture_result, client_name, describe_age, describe_mark, handle, now_ms};
+    use base64::Engine;
+    use serde_json::json;
+
+    #[test]
+    fn client_names() {
+        assert_eq!(client_name("claude-code"), "Claude");
+        // The Claude desktop app reports its own name with the server's.
+        assert_eq!(client_name("local-agent-mode-scribble2fix"), "Claude");
+        assert_eq!(client_name("Visual Studio Code"), "Copilot");
+        assert_eq!(client_name("Cursor"), "Cursor");
+        assert_eq!(client_name(""), "Your AI");
+        assert_eq!(client_name("scribble2fix-client"), "Your AI");
+        assert_eq!(client_name("Zed"), "Zed");
+    }
+
+    #[test]
+    fn ages() {
+        assert_eq!(describe_age(0), "just now");
+        assert_eq!(describe_age(1), "1 minute ago");
+        assert_eq!(describe_age(119), "119 minutes ago");
+        assert_eq!(describe_age(120), "2 hours ago");
+        assert_eq!(describe_age(48 * 60 - 1), "47 hours ago");
+        assert_eq!(describe_age(48 * 60), "2 days ago");
+    }
+
+    #[test]
+    fn marks() {
+        let arrow = json!({ "kind": "arrow", "meaning": "change", "from": [1, 2], "to": [3, 4] });
+        assert_eq!(describe_mark(&arrow), "CHANGE arrow from (1, 2) to (3, 4)");
+        let curved = json!({ "kind": "arrow", "meaning": "change", "from": [1, 2], "via": [5, 6], "to": [3, 4] });
+        assert_eq!(
+            describe_mark(&curved),
+            "CHANGE curved arrow from (1, 2) via (5, 6) to (3, 4)"
+        );
+        let text = json!({ "kind": "text", "meaning": "add", "at": [7, 8], "text": "Save" });
+        assert_eq!(describe_mark(&text), r#"ADD text label at (7, 8): "Save""#);
+        let marker = json!({ "kind": "marker", "meaning": "change", "number": 2, "at": [9, 10] });
+        assert_eq!(describe_mark(&marker), "CHANGE marker #2 at (9, 10)");
+        let boxed = json!({ "kind": "box", "meaning": "add", "box": [1, 2, 3, 4] });
+        assert_eq!(describe_mark(&boxed), "ADD box spanning (1, 2) to (3, 4)");
+        let hidden = json!({ "kind": "redact", "meaning": "hidden on purpose", "box": [1, 2, 3, 4] });
+        assert_eq!(
+            describe_mark(&hidden),
+            "HIDDEN ON PURPOSE area spanning (1, 2) to (3, 4)"
+        );
+        let freehand = json!({ "kind": "freehand", "meaning": "remove", "box": [1, 2, 3, 4] });
+        assert_eq!(
+            describe_mark(&freehand),
+            "REMOVE freehand mark spanning (1, 2) to (3, 4)"
+        );
+        let unknown = json!({ "kind": "freehand", "box": [1, 2, 3, 4] });
+        assert_eq!(describe_mark(&unknown), "? freehand mark spanning (1, 2) to (3, 4)");
+    }
+
+    #[test]
+    fn json_rpc_methods() {
+        let init = handle(&json!({
+            "jsonrpc": "2.0", "id": 1, "method": "initialize",
+            "params": { "protocolVersion": "2025-03-26", "clientInfo": { "name": "x" } }
+        }))
+        .unwrap();
+        assert_eq!(init["id"], 1);
+        assert_eq!(init["result"]["protocolVersion"], "2025-03-26");
+        assert_eq!(init["result"]["serverInfo"]["name"], "scribble2fix");
+        assert_eq!(init["result"]["serverInfo"]["version"], env!("CARGO_PKG_VERSION"));
+        let init = handle(&json!({ "id": 2, "method": "initialize", "params": {} })).unwrap();
+        assert_eq!(init["result"]["protocolVersion"], "2025-06-18");
+
+        assert_eq!(
+            handle(&json!({ "id": 3, "method": "ping" })).unwrap()["result"],
+            json!({})
+        );
+
+        let list = handle(&json!({ "id": 4, "method": "tools/list" })).unwrap();
+        let names: Vec<_> = list["result"]["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|t| t["name"].clone())
+            .collect();
+        assert_eq!(
+            names,
+            [
+                "get_latest_capture",
+                "get_recent_captures",
+                "request_scribble",
+                "wait_for_scribble"
+            ]
+        );
+
+        let unknown = handle(&json!({ "id": "a", "method": "nope" })).unwrap();
+        assert_eq!(unknown["id"], "a");
+        assert_eq!(unknown["error"]["code"], -32601);
+
+        // Notifications have no id and get no answer.
+        assert!(handle(&json!({ "method": "notifications/initialized" })).is_none());
+    }
+
+    #[test]
+    fn capture_results() {
+        let dir = std::env::temp_dir().join(format!("scribble2fix-test-capture-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let write_meta = |minutes_ago: i64| {
+            let meta = json!({
+                "captured_at": "2026-11-22T10:00:00+01:00",
+                "captured_at_unix_ms": now_ms() - minutes_ago * 60_000,
+                "app_name": "Firefox",
+                "window_title": "Docs",
+                "request": { "reason": "Fix the button" },
+                "marks": [
+                    { "kind": "redact", "meaning": "hidden on purpose", "box": [0, 0, 5, 5] },
+                    { "kind": "box", "meaning": "add", "box": [1, 2, 3, 4] },
+                ],
+            });
+            std::fs::write(dir.join("meta.json"), meta.to_string()).unwrap();
+        };
+
+        // Images missing: an error instead of a half capture.
+        write_meta(0);
+        assert_eq!(capture_result(&dir)["isError"], true);
+
+        std::fs::write(dir.join("annotated.png"), "annotated").unwrap();
+        std::fs::write(dir.join("clean.png"), "clean").unwrap();
+        let result = capture_result(&dir);
+        let content = result["content"].as_array().unwrap();
+        assert_eq!(content.len(), 3);
+        let text = content[0]["text"].as_str().unwrap();
+        assert!(text.contains("taken just now (2026-11-22T10:00:00+01:00)"));
+        assert!(text.contains(r#"It answers your request: "Fix the button""#));
+        assert!(text.contains(r#"Window under the drawing: Firefox - "Docs""#));
+        assert!(text.contains("deliberately hid 1 area of"));
+        assert!(text.contains("- HIDDEN ON PURPOSE area spanning (0, 0) to (5, 5)"));
+        assert!(text.contains("- ADD box spanning (1, 2) to (3, 4)"));
+        assert!(!text.contains("more than 10 minutes old"));
+        let b64 = base64::engine::general_purpose::STANDARD;
+        assert_eq!(content[1]["data"], b64.encode("annotated"));
+        assert_eq!(content[2]["data"], b64.encode("clean"));
+
+        write_meta(11);
+        let result = capture_result(&dir);
+        let text = result["content"][0]["text"].as_str().unwrap();
+        assert!(text.contains("taken 11 minutes ago"));
+        assert!(text.contains("more than 10 minutes old"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}

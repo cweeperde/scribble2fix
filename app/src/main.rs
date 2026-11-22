@@ -2049,3 +2049,16 @@ fn main() {
             }
         });
 }
+
+#[cfg(test)]
+mod tests {
+    use super::pretty_hotkey;
+
+    #[test]
+    fn pretty_hotkeys() {
+        let win = if cfg!(target_os = "macos") { "⌘" } else { "Win" };
+        assert_eq!(pretty_hotkey("Super+Shift+Digit2"), format!("{win} + Shift + 2"));
+        assert_eq!(pretty_hotkey("Control+KeyS"), "Control + S");
+        assert_eq!(pretty_hotkey("F6"), "F6");
+    }
+}
