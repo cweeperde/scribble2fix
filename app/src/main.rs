@@ -1265,12 +1265,14 @@ fn set_visible_no_activate(window: &WebviewWindow, visible: bool) {
 /// its shadow and entrance animation).
 const REQUEST_SIZE: (f64, f64) = (520.0, 210.0);
 
+type Rect = tauri::PhysicalRect<i32, u32>;
+
 /// Where the request card and the glow frame go on the target monitor, in
 /// physical pixels: (glow frame, request card, scale factor). The frame goes
 /// around the whole screen on macOS, above the menu bar and around the camera
 /// notch (it's click-through). Elsewhere it leaves out the taskbar, so
 /// Windows doesn't treat it as a fullscreen window.
-fn request_layout(app: &AppHandle) -> Option<(tauri::PhysicalRect<i32, u32>, tauri::PhysicalRect<i32, u32>, f64)> {
+fn request_layout(app: &AppHandle) -> Option<(Rect, Rect, f64)> {
     let monitor = target_monitor(app)?;
     // The work area leaves out the taskbar / dock / menu bar.
     let work = *monitor.work_area();
@@ -1397,7 +1399,7 @@ fn request_decline(app: AppHandle) {
 #[tauri::command]
 fn request_ready(window: WebviewWindow, app: AppHandle) -> serde_json::Value {
     let request = (window.is_visible().unwrap_or(false))
-        .then(|| storage::read_request())
+        .then(storage::read_request)
         .flatten();
     match request {
         Some(request) => {
