@@ -289,7 +289,7 @@ mod macos {
             let frame = screen.frame();
             let safe_top = screen.safeAreaInsets().top;
             let (l, r) = (screen.auxiliaryTopLeftArea(), screen.auxiliaryTopRightArea());
-            let notch = (safe_top > 0.0 && l.size.width > 0.0 && r.size.width > 0.0).then(|| Notch {
+            let notch = (safe_top > 0.0 && l.size.width > 0.0 && r.size.width > 0.0).then_some(Notch {
                 left: l.origin.x + l.size.width - frame.origin.x,
                 right: r.origin.x - frame.origin.x,
                 height: safe_top,
@@ -577,7 +577,10 @@ fn capture(app: &AppHandle) -> Result<(), String> {
 fn watch_desktop(app: &AppHandle, marker: Option<DesktopMarker>) {
     let state = app.state::<AppState>();
     let generation = state.freeze_generation.fetch_add(1, Ordering::SeqCst) + 1;
-    *state.frozen_desktop.lock().unwrap() = marker.clone();
+    // DesktopMarker is Copy on macOS and Linux, but not on Windows.
+    #[allow(clippy::clone_on_copy)]
+    let frozen = marker.clone();
+    *state.frozen_desktop.lock().unwrap() = frozen;
     let Some(marker) = marker else { return };
     let app = app.clone();
     thread::spawn(move || loop {
