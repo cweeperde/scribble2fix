@@ -16,3 +16,7 @@ Thumbs.db
 
 # Temporary files of docs/mockups/render.sh
 /docs/mockups/build/
+
+# Local-only agent and developer notes (shared directly, never committed)
+AGENTS.md
+DEVELOPMENT.md

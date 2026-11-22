@@ -1,0 +1,3 @@
+[alias]
+# The same lint check the CI runs.
+lint = "clippy --workspace --all-targets --locked -- -D warnings"
