@@ -16,7 +16,7 @@ use serde::{Deserialize, Serialize};
 /// One key on every system. On MacBook keyboards it's Fn+F6 (unless the F
 /// keys are set to work as standard function keys); the welcome screen says so.
 pub const DEFAULT_HOTKEY: &str = "F6";
-pub const DEFAULT_KEEP_CAPTURES: usize = 10;
+pub const DEFAULT_KEEP_CAPTURES:usize=10;
 pub const MAX_KEEP_CAPTURES: usize = 100;
 
 pub fn data_dir() -> PathBuf {
