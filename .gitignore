@@ -20,3 +20,4 @@ Thumbs.db
 # Local-only agent and developer notes (shared directly, never committed)
 AGENTS.md
 DEVELOPMENT.md
+SETUP.md
