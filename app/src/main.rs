@@ -20,8 +20,8 @@ use storage::{Config, Crop, Meta};
 use tauri::{
     menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, RunEvent, State, WebviewUrl,
-    WebviewWindow, WebviewWindowBuilder, WindowEvent,
+    AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, RunEvent, State, WebviewUrl, WebviewWindow,
+    WebviewWindowBuilder, WindowEvent,
 };
 use tauri_plugin_autostart::{MacosLauncher, ManagerExt};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
@@ -94,7 +94,13 @@ fn screen_windows(area: &Area) -> Vec<ScreenWindow> {
         let k = area.scale;
         macos::app_windows()
             .into_iter()
-            .map(|w| ScreenWindow { x: w.x * k, y: w.y * k, width: w.width * k, height: w.height * k, ..w })
+            .map(|w| ScreenWindow {
+                x: w.x * k,
+                y: w.y * k,
+                width: w.width * k,
+                height: w.height * k,
+                ..w
+            })
             .collect()
     }
     #[cfg(not(target_os = "macos"))]
@@ -125,7 +131,11 @@ fn pretty_hotkey(hotkey: &str) -> String {
     let win = if cfg!(target_os = "macos") { "⌘" } else { "Win" };
     hotkey
         .split('+')
-        .map(|p| p.trim_start_matches("Key").trim_start_matches("Digit").replace("Super", win))
+        .map(|p| {
+            p.trim_start_matches("Key")
+                .trim_start_matches("Digit")
+                .replace("Super", win)
+        })
         .collect::<Vec<_>>()
         .join(" + ")
 }
@@ -168,19 +178,17 @@ struct Notch {
 #[cfg(target_os = "macos")]
 mod macos {
     use super::{Notch, ScreenTop, ScreenWindow};
-    use objc2::MainThreadMarker;
-    use objc2_core_foundation::{CFDictionary, CFNumber, CFNumberType, CFString, CGRect};
-    use objc2_core_graphics::{
-        CGRectMakeWithDictionaryRepresentation, CGWindowListCopyWindowInfo, CGWindowListOption,
-    };
-    use std::ffi::c_void;
-    use objc2_app_kit::{
-        NSApplicationActivationOptions, NSPopUpMenuWindowLevel, NSRunningApplication, NSScreen,
-        NSWindow, NSWindowAnimationBehavior, NSWindowCollectionBehavior,
-    };
     use block2::RcBlock;
+    use objc2::MainThreadMarker;
+    use objc2_app_kit::{
+        NSApplicationActivationOptions, NSPopUpMenuWindowLevel, NSRunningApplication, NSScreen, NSWindow,
+        NSWindowAnimationBehavior, NSWindowCollectionBehavior,
+    };
     use objc2_app_kit::{NSWorkspace, NSWorkspaceActiveSpaceDidChangeNotification};
+    use objc2_core_foundation::{CFDictionary, CFNumber, CFNumberType, CFString, CGRect};
+    use objc2_core_graphics::{CGRectMakeWithDictionaryRepresentation, CGWindowListCopyWindowInfo, CGWindowListOption};
     use objc2_foundation::NSNotification;
+    use std::ffi::c_void;
     use std::ptr::NonNull;
     use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU64, Ordering};
     use tauri::{AppHandle, Manager, WebviewWindow};
@@ -312,10 +320,13 @@ mod macos {
                 let number = |key: &str| {
                     let n = &*(get(key)? as *const CFNumber);
                     let mut v = 0i32;
-                    n.value(CFNumberType::IntType, &mut v as *mut i32 as *mut c_void).then_some(v)
+                    n.value(CFNumberType::IntType, &mut v as *mut i32 as *mut c_void)
+                        .then_some(v)
                 };
                 let string = |key: &str| {
-                    get(key).map(|v| (*(v as *const CFString)).to_string()).unwrap_or_default()
+                    get(key)
+                        .map(|v| (*(v as *const CFString)).to_string())
+                        .unwrap_or_default()
                 };
                 if number("kCGWindowLayer")? != 0 || number("kCGWindowOwnerPID")? == own {
                     return None;
@@ -346,12 +357,14 @@ mod macos {
             SPACE_CHANGES.fetch_add(1, Ordering::SeqCst);
         });
         let observer = unsafe {
-            NSWorkspace::sharedWorkspace().notificationCenter().addObserverForName_object_queue_usingBlock(
-                Some(NSWorkspaceActiveSpaceDidChangeNotification),
-                None,
-                None,
-                &block,
-            )
+            NSWorkspace::sharedWorkspace()
+                .notificationCenter()
+                .addObserverForName_object_queue_usingBlock(
+                    Some(NSWorkspaceActiveSpaceDidChangeNotification),
+                    None,
+                    None,
+                    &block,
+                )
         };
         // Observes for the app's lifetime.
         std::mem::forget(observer);
@@ -410,10 +423,7 @@ fn start_capture(app: &AppHandle) {
         return;
     }
     if !macos::check_screen_access() {
-        show_toast(
-            app,
-            "Allow Screen Recording for Scribble2Fix, then restart it",
-        );
+        show_toast(app, "Allow Screen Recording for Scribble2Fix, then restart it");
     }
     if storage::read_request().is_some() {
         hide_request(app);
@@ -421,9 +431,7 @@ fn start_capture(app: &AppHandle) {
     let app = app.clone();
     thread::spawn(move || {
         if let Err(e) = prepare(&app, target_monitor(&app)).and_then(|_| capture(&app)) {
-            app.state::<AppState>()
-                .active
-                .store(false, Ordering::SeqCst);
+            app.state::<AppState>().active.store(false, Ordering::SeqCst);
             show_toast(&app, &format!("Capture failed: {e}"));
         }
     });
@@ -505,9 +513,7 @@ fn capture(app: &AppHandle) -> Result<(), String> {
         area.y as f64 + area.height as f64 / 2.0,
     );
 
-    let shot = find_screen(&area, px, py)?
-        .capture_image()
-        .map_err(err)?;
+    let shot = find_screen(&area, px, py)?.capture_image().map_err(err)?;
     let (width, height) = (shot.width(), shot.height());
 
     *state.pixels.lock().unwrap() = Some(shot.into_raw());
@@ -577,9 +583,7 @@ fn watch_desktop(app: &AppHandle, marker: Option<DesktopMarker>) {
     thread::spawn(move || loop {
         thread::sleep(Duration::from_millis(250));
         let state = app.state::<AppState>();
-        if state.freeze_generation.load(Ordering::SeqCst) != generation
-            || !state.active.load(Ordering::SeqCst)
-        {
+        if state.freeze_generation.load(Ordering::SeqCst) != generation || !state.active.load(Ordering::SeqCst) {
             return;
         }
         if desktop_left(&marker) {
@@ -636,15 +640,14 @@ fn current_virtual_desktop() -> Option<Vec<u8>> {
 fn desktop_marker() -> Option<DesktopMarker> {
     use windows::core::{BOOL, GUID};
     use windows::Win32::Foundation::{HWND, LPARAM};
-    use windows::Win32::System::Com::{
-        CoCreateInstance, CoInitializeEx, CLSCTX_ALL, COINIT_APARTMENTTHREADED,
-    };
+    use windows::Win32::System::Com::{CoCreateInstance, CoInitializeEx, CLSCTX_ALL, COINIT_APARTMENTTHREADED};
     use windows::Win32::UI::Shell::{IVirtualDesktopManager, VirtualDesktopManager};
-    use windows::Win32::UI::WindowsAndMessaging::{
-        EnumWindows, GetWindowThreadProcessId, IsWindowVisible,
-    };
+    use windows::Win32::UI::WindowsAndMessaging::{EnumWindows, GetWindowThreadProcessId, IsWindowVisible};
     if let Some(desktop) = current_virtual_desktop() {
-        return Some(DesktopMarker { desktop: Some(desktop), window: None });
+        return Some(DesktopMarker {
+            desktop: Some(desktop),
+            window: None,
+        });
     }
     unsafe extern "system" fn collect(hwnd: HWND, list: LPARAM) -> BOOL {
         unsafe { (*(list.0 as *mut Vec<HWND>)).push(hwnd) };
@@ -652,8 +655,7 @@ fn desktop_marker() -> Option<DesktopMarker> {
     }
     unsafe {
         let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
-        let manager: IVirtualDesktopManager =
-            CoCreateInstance(&VirtualDesktopManager, None, CLSCTX_ALL).ok()?;
+        let manager: IVirtualDesktopManager = CoCreateInstance(&VirtualDesktopManager, None, CLSCTX_ALL).ok()?;
         let mut all: Vec<HWND> = Vec::new();
         // Front to back.
         let _ = EnumWindows(Some(collect), LPARAM(&mut all as *mut _ as isize));
@@ -667,16 +669,17 @@ fn desktop_marker() -> Option<DesktopMarker> {
                 && manager.GetWindowDesktopId(hwnd).is_ok_and(|id| id != GUID::zeroed())
                 && manager.IsWindowOnCurrentVirtualDesktop(hwnd).is_ok_and(|on| on.as_bool())
         })?;
-        Some(DesktopMarker { desktop: None, window: Some(window.0 as isize) })
+        Some(DesktopMarker {
+            desktop: None,
+            window: Some(window.0 as isize),
+        })
     }
 }
 
 #[cfg(windows)]
 fn desktop_left(marker: &DesktopMarker) -> bool {
     use windows::Win32::Foundation::HWND;
-    use windows::Win32::System::Com::{
-        CoCreateInstance, CoInitializeEx, CLSCTX_ALL, COINIT_APARTMENTTHREADED,
-    };
+    use windows::Win32::System::Com::{CoCreateInstance, CoInitializeEx, CLSCTX_ALL, COINIT_APARTMENTTHREADED};
     use windows::Win32::UI::Shell::{IVirtualDesktopManager, VirtualDesktopManager};
     use windows::Win32::UI::WindowsAndMessaging::IsWindow;
     if let Some(desktop) = &marker.desktop {
@@ -686,13 +689,14 @@ fn desktop_left(marker: &DesktopMarker) -> bool {
     let hwnd = HWND(window as _);
     unsafe {
         let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
-        let Ok(manager) =
-            CoCreateInstance::<_, IVirtualDesktopManager>(&VirtualDesktopManager, None, CLSCTX_ALL)
+        let Ok(manager) = CoCreateInstance::<_, IVirtualDesktopManager>(&VirtualDesktopManager, None, CLSCTX_ALL)
         else {
             return false;
         };
         IsWindow(Some(hwnd)).as_bool()
-            && manager.IsWindowOnCurrentVirtualDesktop(hwnd).is_ok_and(|on| !on.as_bool())
+            && manager
+                .IsWindowOnCurrentVirtualDesktop(hwnd)
+                .is_ok_and(|on| !on.as_bool())
     }
 }
 
@@ -734,9 +738,10 @@ struct RequestInfo {
 fn find_screen(area: &Area, cursor_x: f64, cursor_y: f64) -> Result<xcap::Monitor, String> {
     let lx = (area.x as f64 / area.scale).round() as i32;
     let ly = (area.y as f64 / area.scale).round() as i32;
-    let found = xcap::Monitor::all().map_err(err)?.into_iter().find(|m| {
-        matches!((m.x(), m.y()), (Ok(x), Ok(y)) if (x == area.x && y == area.y) || (x == lx && y == ly))
-    });
+    let found = xcap::Monitor::all()
+        .map_err(err)?
+        .into_iter()
+        .find(|m| matches!((m.x(), m.y()), (Ok(x), Ok(y)) if (x == area.x && y == area.y) || (x == lx && y == ly)));
     match found {
         Some(m) => Ok(m),
         None => xcap::Monitor::from_point(cursor_x as i32, cursor_y as i32).map_err(err),
@@ -797,13 +802,7 @@ async fn refreeze(app: AppHandle, window: WebviewWindow, desktop: bool) -> Resul
     if !state.active.load(Ordering::SeqCst) {
         return Ok(false);
     }
-    let desktop = desktop
-        || state
-            .frozen_desktop
-            .lock()
-            .unwrap()
-            .as_ref()
-            .is_some_and(desktop_left);
+    let desktop = desktop || state.frozen_desktop.lock().unwrap().as_ref().is_some_and(desktop_left);
     if !desktop {
         let tool = tauri::async_runtime::spawn_blocking(|| {
             thread::sleep(Duration::from_millis(150));
@@ -828,9 +827,7 @@ async fn refreeze(app: AppHandle, window: WebviewWindow, desktop: bool) -> Resul
     .await
     .unwrap_or_else(|e| Err(err(e)));
     if let Err(e) = result {
-        app.state::<AppState>()
-            .active
-            .store(false, Ordering::SeqCst);
+        app.state::<AppState>().active.store(false, Ordering::SeqCst);
         show_toast(&app, &format!("Capture failed: {e}"));
         return Err(e);
     }
@@ -847,8 +844,7 @@ fn screenshot_tool_in_front() -> bool {
         GetMonitorInfoW, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTONEAREST,
     };
     use windows_sys::Win32::UI::WindowsAndMessaging::{
-        GetForegroundWindow, GetWindowLongW, GetWindowRect, GetWindowThreadProcessId, GWL_EXSTYLE,
-        WS_EX_TOPMOST,
+        GetForegroundWindow, GetWindowLongW, GetWindowRect, GetWindowThreadProcessId, GWL_EXSTYLE, WS_EX_TOPMOST,
     };
     unsafe {
         let front = GetForegroundWindow();
@@ -875,9 +871,7 @@ fn screenshot_tool_in_front() -> bool {
 /// macOS: its screenshot tool (Cmd+Shift+3/4/5).
 #[cfg(target_os = "macos")]
 fn screenshot_tool_in_front() -> bool {
-    macos::front_app_id().is_some_and(|id| {
-        id == "com.apple.screencaptureui" || id == "com.apple.Screenshot"
-    })
+    macos::front_app_id().is_some_and(|id| id == "com.apple.screencaptureui" || id == "com.apple.Screenshot")
 }
 
 #[cfg(target_os = "linux")]
@@ -1010,9 +1004,7 @@ fn refresh_taskbars() {}
 /// stays open, so the user can simply press the hotkey again.
 #[tauri::command]
 fn overlay_loaded(app: AppHandle, window: WebviewWindow) -> Result<(), String> {
-    app.state::<AppState>()
-        .active
-        .store(false, Ordering::SeqCst);
+    app.state::<AppState>().active.store(false, Ordering::SeqCst);
     window.hide().map_err(err)
 }
 
@@ -1025,9 +1017,7 @@ fn cancel_capture(app: AppHandle, _window: WebviewWindow) -> Result<(), String> 
 /// Backs out of a capture: hides the overlay, tells a waiting AI tool the
 /// user cancelled and hands the focus back.
 fn do_cancel(app: &AppHandle) {
-    app.state::<AppState>()
-        .active
-        .store(false, Ordering::SeqCst);
+    app.state::<AppState>().active.store(false, Ordering::SeqCst);
     if let Some(request) = storage::answer_request(None) {
         show_toast(app, &format!("Cancelled. {} was told", request.client));
     }
@@ -1058,9 +1048,9 @@ fn finish_capture(
         let x = area.x as f64 + crop.x as f64 + crop.width as f64 / 2.0;
         let y = area.y as f64 + crop.y as f64 + crop.height as f64 / 2.0;
         let windows = state.windows.lock().unwrap();
-        let hit = windows.iter().find(|w| {
-            x >= w.x && x < w.x + w.width && y >= w.y && y < w.y + w.height
-        });
+        let hit = windows
+            .iter()
+            .find(|w| x >= w.x && x < w.x + w.width && y >= w.y && y < w.y + w.height);
         if let Some(w) = hit.filter(|w| !w.app_name.is_empty()) {
             source.app_name = w.app_name.clone();
             source.window_title = w.title.clone();
@@ -1072,9 +1062,7 @@ fn finish_capture(
         let message = match deliver(&app, &annotated, &clean, crop, image_scale, marks, source) {
             Ok(dir) => match dir.and_then(|d| storage::answer_request(Some(d))) {
                 Some(request) => format!("Sent to {}, also copied", request.client),
-                None if config(&app).copy_path && !config(&app).never_save => {
-                    "File path copied".to_string()
-                }
+                None if config(&app).copy_path && !config(&app).never_save => "File path copied".to_string(),
                 None => paste_hint().to_string(),
             },
             Err(e) => {
@@ -1116,8 +1104,7 @@ fn deliver(
             os: std::env::consts::OS,
             captured_at,
             captured_at_unix_ms: source.unix_ms,
-            drawing_seconds: ((chrono::Utc::now().timestamp_millis() - source.unix_ms).max(0) as f64 / 1000.0)
-                .round(),
+            drawing_seconds: ((chrono::Utc::now().timestamp_millis() - source.unix_ms).max(0) as f64 / 1000.0).round(),
             app_name: source.app_name,
             window_title: source.window_title,
             monitor: source.monitor,
@@ -1140,9 +1127,7 @@ fn deliver(
     let clipboard = clipboard.as_mut().unwrap();
     if let (true, Some(dir)) = (config.copy_path, &dir) {
         let path = dir.join("annotated.png");
-        clipboard
-            .set_text(path.to_string_lossy().into_owned())
-            .map_err(err)?;
+        clipboard.set_text(path.to_string_lossy().into_owned()).map_err(err)?;
         return Ok(Some(dir.clone()));
     }
     let img = image::load_from_memory(&annotated).map_err(err)?.to_rgba8();
@@ -1215,12 +1200,7 @@ fn show_toast_for(app: &AppHandle, text: &str, ms: u64) {
     let app = app.clone();
     thread::spawn(move || {
         thread::sleep(Duration::from_millis(ms));
-        if app
-            .state::<AppState>()
-            .toast_generation
-            .load(Ordering::SeqCst)
-            == generation
-        {
+        if app.state::<AppState>().toast_generation.load(Ordering::SeqCst) == generation {
             set_visible_no_activate(&toast, false);
         }
     });
@@ -1237,21 +1217,21 @@ fn show_toast_for(app: &AppHandle, text: &str, ms: u64) {
 #[cfg(windows)]
 fn move_to_current_desktop(window: &WebviewWindow) {
     use windows::Win32::Foundation::HWND;
-    use windows::Win32::System::Com::{
-        CoCreateInstance, CoInitializeEx, CLSCTX_ALL, COINIT_APARTMENTTHREADED,
-    };
+    use windows::Win32::System::Com::{CoCreateInstance, CoInitializeEx, CLSCTX_ALL, COINIT_APARTMENTTHREADED};
     use windows::Win32::UI::Shell::{IVirtualDesktopManager, VirtualDesktopManager};
     use windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow;
     let Ok(hwnd) = window.hwnd() else { return };
     let hwnd = HWND(hwnd.0 as _);
     unsafe {
         let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
-        let Ok(manager) =
-            CoCreateInstance::<_, IVirtualDesktopManager>(&VirtualDesktopManager, None, CLSCTX_ALL)
+        let Ok(manager) = CoCreateInstance::<_, IVirtualDesktopManager>(&VirtualDesktopManager, None, CLSCTX_ALL)
         else {
             return;
         };
-        if manager.IsWindowOnCurrentVirtualDesktop(hwnd).is_ok_and(|on| on.as_bool()) {
+        if manager
+            .IsWindowOnCurrentVirtualDesktop(hwnd)
+            .is_ok_and(|on| on.as_bool())
+        {
             return;
         }
         if let Ok(desktop) = manager.GetWindowDesktopId(GetForegroundWindow()) {
@@ -1270,12 +1250,7 @@ fn set_visible_no_activate(window: &WebviewWindow, visible: bool) {
         move_to_current_desktop(window);
     }
     if let Ok(hwnd) = window.hwnd() {
-        unsafe {
-            ShowWindow(
-                hwnd.0 as _,
-                if visible { SW_SHOWNOACTIVATE } else { SW_HIDE },
-            )
-        };
+        unsafe { ShowWindow(hwnd.0 as _, if visible { SW_SHOWNOACTIVATE } else { SW_HIDE }) };
     }
 }
 
@@ -1295,22 +1270,20 @@ const REQUEST_SIZE: (f64, f64) = (520.0, 210.0);
 /// around the whole screen on macOS, above the menu bar and around the camera
 /// notch (it's click-through). Elsewhere it leaves out the taskbar, so
 /// Windows doesn't treat it as a fullscreen window.
-fn request_layout(
-    app: &AppHandle,
-) -> Option<(tauri::PhysicalRect<i32, u32>, tauri::PhysicalRect<i32, u32>, f64)> {
+fn request_layout(app: &AppHandle) -> Option<(tauri::PhysicalRect<i32, u32>, tauri::PhysicalRect<i32, u32>, f64)> {
     let monitor = target_monitor(app)?;
     // The work area leaves out the taskbar / dock / menu bar.
     let work = *monitor.work_area();
     let frame = if cfg!(target_os = "macos") {
-        tauri::PhysicalRect { position: *monitor.position(), size: *monitor.size() }
+        tauri::PhysicalRect {
+            position: *monitor.position(),
+            size: *monitor.size(),
+        }
     } else {
         work
     };
     let scale = monitor.scale_factor();
-    let (w, h) = (
-        (REQUEST_SIZE.0 * scale) as u32,
-        (REQUEST_SIZE.1 * scale) as u32,
-    );
+    let (w, h) = ((REQUEST_SIZE.0 * scale) as u32, (REQUEST_SIZE.1 * scale) as u32);
     let x = work.position.x + (work.size.width.saturating_sub(w) / 2) as i32;
     let card = tauri::PhysicalRect {
         position: PhysicalPosition::new(x, work.position.y),
@@ -1327,10 +1300,7 @@ fn show_request(app: &AppHandle) {
     let Some(request) = storage::read_request() else {
         return;
     };
-    let (Some(card), Some(glow)) = (
-        app.get_webview_window("request"),
-        app.get_webview_window("glow"),
-    ) else {
+    let (Some(card), Some(glow)) = (app.get_webview_window("request"), app.get_webview_window("glow")) else {
         return;
     };
     let Some((frame, card_rect, scale)) = request_layout(app) else {
@@ -1499,11 +1469,7 @@ struct MonitorChoice {
 
 /// The connected monitors for Settings → Monitor, e.g. "Display 2 · 2560 × 1440 (main)".
 fn monitor_choices(app: &AppHandle) -> Vec<MonitorChoice> {
-    let primary = app
-        .primary_monitor()
-        .ok()
-        .flatten()
-        .and_then(|m| m.name().cloned());
+    let primary = app.primary_monitor().ok().flatten().and_then(|m| m.name().cloned());
     app.available_monitors()
         .unwrap_or_default()
         .iter()
@@ -1511,12 +1477,7 @@ fn monitor_choices(app: &AppHandle) -> Vec<MonitorChoice> {
         .filter_map(|(i, m)| {
             let id = m.name()?.clone();
             let main = if primary.as_ref() == Some(&id) { " (main)" } else { "" };
-            let label = format!(
-                "Display {} · {} × {}{main}",
-                i + 1,
-                m.size().width,
-                m.size().height
-            );
+            let label = format!("Display {} · {} × {}{main}", i + 1, m.size().width, m.size().height);
             Some(MonitorChoice { id, label })
         })
         .collect()
@@ -1551,8 +1512,7 @@ fn set_hotkey(app: AppHandle, hotkey: String) -> Result<(), String> {
     hotkey
         .parse::<Shortcut>()
         .map_err(|e| format!("Not a valid shortcut: {e}"))?;
-    register_hotkey(&app, &hotkey)
-        .map_err(|_| format!("{} is already used by another app", pretty_hotkey(&hotkey)))?;
+    register_hotkey(&app, &hotkey).map_err(|_| format!("{} is already used by another app", pretty_hotkey(&hotkey)))?;
     let _ = app.global_shortcut().unregister_all();
     update_config(&app, |c| c.hotkey = hotkey)?;
     Ok(())
@@ -1561,12 +1521,7 @@ fn set_hotkey(app: AppHandle, hotkey: String) -> Result<(), String> {
 #[tauri::command]
 fn set_autostart(app: AppHandle, on: bool) -> Result<(), String> {
     let launcher = app.autolaunch();
-    if on {
-        launcher.enable()
-    } else {
-        launcher.disable()
-    }
-    .map_err(err)
+    if on { launcher.enable() } else { launcher.disable() }.map_err(err)
 }
 
 #[tauri::command]
@@ -1684,9 +1639,7 @@ fn open_link(app: AppHandle, which: String) -> Result<(), String> {
 fn open_captures(app: AppHandle) -> Result<(), String> {
     let dir = storage::captures_dir();
     let _ = std::fs::create_dir_all(&dir);
-    app.opener()
-        .open_path(dir.to_string_lossy(), None::<&str>)
-        .map_err(err)
+    app.opener().open_path(dir.to_string_lossy(), None::<&str>).map_err(err)
 }
 
 /// Settings and onboarding: small fixed windows. While one is open the hotkey
@@ -1696,15 +1649,14 @@ fn open_window(app: &AppHandle, label: &str, title: &str, width: f64, height: f6
         let _ = w.set_focus();
         return;
     }
-    let Ok(window) =
-        WebviewWindowBuilder::new(app, label, WebviewUrl::App(format!("{label}.html").into()))
-            .title(title)
-            .inner_size(width, height)
-            .resizable(false)
-            .maximizable(false)
-            .minimizable(false)
-            .center()
-            .build()
+    let Ok(window) = WebviewWindowBuilder::new(app, label, WebviewUrl::App(format!("{label}.html").into()))
+        .title(title)
+        .inner_size(width, height)
+        .resizable(false)
+        .maximizable(false)
+        .minimizable(false)
+        .center()
+        .build()
     else {
         return;
     };
@@ -1721,11 +1673,7 @@ fn open_window(app: &AppHandle, label: &str, title: &str, width: f64, height: f6
             }
             // Settings → "Run setup again" swaps one window for the other;
             // the hotkey stays off until both are closed.
-            let other = if label == "settings" {
-                "onboarding"
-            } else {
-                "settings"
-            };
+            let other = if label == "settings" { "onboarding" } else { "settings" };
             if app.get_webview_window(other).is_some() {
                 return;
             }
@@ -1768,9 +1716,7 @@ fn watch_fullscreen(app: &AppHandle) {
             continue;
         }
         let config = config(app);
-        let pause = config.pause_in_fullscreen
-            && !state.active.load(Ordering::SeqCst)
-            && fullscreen_app_in_front(app);
+        let pause = config.pause_in_fullscreen && !state.active.load(Ordering::SeqCst) && fullscreen_app_in_front(app);
         if pause == state.hotkey_paused.load(Ordering::SeqCst) {
             continue;
         }
@@ -1787,9 +1733,7 @@ fn watch_fullscreen(app: &AppHandle) {
 /// borderless fullscreen), the other state means an exclusive Direct3D game.
 #[cfg(windows)]
 fn fullscreen_app_in_front(_app: &AppHandle) -> bool {
-    use windows_sys::Win32::UI::Shell::{
-        SHQueryUserNotificationState, QUNS_BUSY, QUNS_RUNNING_D3D_FULL_SCREEN,
-    };
+    use windows_sys::Win32::UI::Shell::{SHQueryUserNotificationState, QUNS_BUSY, QUNS_RUNNING_D3D_FULL_SCREEN};
     let mut state = 0;
     let ok = unsafe { SHQueryUserNotificationState(&mut state) } == 0;
     ok && (state == QUNS_BUSY || state == QUNS_RUNNING_D3D_FULL_SCREEN)
@@ -1807,20 +1751,14 @@ fn fullscreen_app_in_front(app: &AppHandle) -> bool {
     }
     let p = w.position;
     let near = |a: f64, b: f64| (a - b).abs() <= 2.0;
-    app.available_monitors()
-        .unwrap_or_default()
-        .iter()
-        .any(|m| {
-            let s = m.scale_factor();
-            let (mx, my) = (m.position().x as f64, m.position().y as f64);
-            let (mw, mh) = (m.size().width as f64, m.size().height as f64);
-            [1.0, s].iter().any(|k| {
-                near(p.x, mx / k)
-                    && near(p.y, my / k)
-                    && near(p.width, mw / k)
-                    && near(p.height, mh / k)
-            })
-        })
+    app.available_monitors().unwrap_or_default().iter().any(|m| {
+        let s = m.scale_factor();
+        let (mx, my) = (m.position().x as f64, m.position().y as f64);
+        let (mw, mh) = (m.size().width as f64, m.size().height as f64);
+        [1.0, s]
+            .iter()
+            .any(|k| near(p.x, mx / k) && near(p.y, my / k) && near(p.width, mw / k) && near(p.height, mh / k))
+    })
 }
 
 // ---------------------------------------------------------------- updates
@@ -1831,14 +1769,10 @@ async fn check_update(app: &AppHandle) -> Result<(), String> {
     let Some(update) = app.updater().map_err(err)?.check().await.map_err(err)? else {
         return Ok(());
     };
-    show_toast(
-        app,
-        &format!("Updating Scribble2Fix to {}…", update.version),
-    );
+    show_toast(app, &format!("Updating Scribble2Fix to {}…", update.version));
     let bytes = update.download(|_, _| {}, || {}).await.map_err(err)?;
     while app.state::<AppState>().active.load(Ordering::SeqCst) {
-        let _ =
-            tauri::async_runtime::spawn_blocking(|| thread::sleep(Duration::from_secs(2))).await;
+        let _ = tauri::async_runtime::spawn_blocking(|| thread::sleep(Duration::from_secs(2))).await;
     }
     update.install(bytes).map_err(err)?;
     app.restart();
@@ -1937,15 +1871,7 @@ fn create_tray(app: &AppHandle) -> tauri::Result<()> {
     let settings = MenuItem::with_id(app, "settings", "Settings…", true, None::<&str>)?;
     let folder = MenuItem::with_id(app, "folder", "Open captures folder", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "Quit Scribble2Fix", true, None::<&str>)?;
-    let menu = Menu::with_items(
-        app,
-        &[
-            &settings,
-            &folder,
-            &PredefinedMenuItem::separator(app)?,
-            &quit,
-        ],
-    )?;
+    let menu = Menu::with_items(app, &[&settings, &folder, &PredefinedMenuItem::separator(app)?, &quit])?;
 
     TrayIconBuilder::with_id("main")
         .icon(app.default_window_icon().cloned().expect("app icon"))
@@ -2018,10 +1944,7 @@ fn main() {
                 })
                 .build(),
         )
-        .plugin(tauri_plugin_autostart::init(
-            MacosLauncher::LaunchAgent,
-            None,
-        ))
+        .plugin(tauri_plugin_autostart::init(MacosLauncher::LaunchAgent, None))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(AppState::default())
@@ -2119,10 +2042,7 @@ fn main() {
         .expect("failed to start Scribble2Fix")
         .run(|_app, event| {
             // Closing windows must not quit the tray app; only "Quit" does.
-            if let RunEvent::ExitRequested {
-                code: None, api, ..
-            } = event
-            {
+            if let RunEvent::ExitRequested { code: None, api, .. } = event {
                 api.prevent_exit();
             }
         });

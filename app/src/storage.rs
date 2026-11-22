@@ -88,10 +88,7 @@ pub fn load_config() -> Config {
 
 pub fn save_config(config: &Config) -> io::Result<()> {
     fs::create_dir_all(data_dir())?;
-    fs::write(
-        data_dir().join("config.json"),
-        serde_json::to_string_pretty(config)?,
-    )
+    fs::write(data_dir().join("config.json"), serde_json::to_string_pretty(config)?)
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy)]
@@ -146,12 +143,7 @@ pub struct Meta {
     pub marks: serde_json::Value,
 }
 
-pub fn save_capture(
-    annotated_png: &[u8],
-    clean_png: &[u8],
-    meta: &Meta,
-    keep: usize,
-) -> io::Result<PathBuf> {
+pub fn save_capture(annotated_png: &[u8], clean_png: &[u8], meta: &Meta, keep: usize) -> io::Result<PathBuf> {
     let name = chrono::DateTime::from_timestamp_millis(meta.captured_at_unix_ms)
         .unwrap_or_default()
         .with_timezone(&chrono::Local)
