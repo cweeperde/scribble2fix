@@ -75,10 +75,22 @@ jobs:
       - name: Install Rust
         shell: bash
         run: |
-          rustup toolchain install stable --profile minimal
+          rustup toolchain install # the version from rust-toolchain.toml
           if [ "$RUNNER_OS" = macOS ]; then rustup target add aarch64-apple-darwin x86_64-apple-darwin; fi
 
       - uses: Swatinem/rust-cache@v2
+
+      # Releases only: the tag must match the app version and CHANGELOG.md must
+      # have an entry for it, and the tests must pass on every system. (The
+      # check runs once, on Linux; a failure there blocks the release job.)
+      - name: Check release version and changelog
+        if: startsWith(github.ref, 'refs/tags/v') && runner.os == 'Linux'
+        shell: bash
+        run: .github/scripts/check-release.sh "${GITHUB_REF_NAME#v}"
+
+      - name: Tests
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: cargo test --workspace --locked
 
       - uses: actions/setup-node@v7
         with:
