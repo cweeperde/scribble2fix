@@ -618,8 +618,19 @@ function drawVeil(ctx, s) {
   ctx.roundRect(x, y, w, h, r);
   ctx.clip();
   drawBlurred(ctx, x, y, w, h, k);
-  ctx.fillStyle = 'rgba(20, 20, 24, 0.35)';
+  // Glass tint: catches light at the top, denser at the bottom.
+  const g = ctx.createLinearGradient(0, y, 0, y + h);
+  g.addColorStop(0, 'rgba(255, 255, 255, 0.12)');
+  g.addColorStop(0.3, 'rgba(20, 20, 24, 0.28)');
+  g.addColorStop(1, 'rgba(20, 20, 24, 0.45)');
+  ctx.fillStyle = g;
   ctx.fillRect(x, y, w, h);
+  // A hairline of light just inside, like the edge of a pane.
+  ctx.beginPath();
+  ctx.roundRect(x + k, y + k, w - 2 * k, h - 2 * k, Math.max(1, r - k));
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
+  ctx.lineWidth = k;
+  ctx.stroke();
   ctx.restore();
   ctx.beginPath();
   ctx.roundRect(x + 0.5 * k, y + 0.5 * k, w - k, h - k, r);
@@ -628,27 +639,78 @@ function drawVeil(ctx, s) {
   ctx.lineWidth = 1.5 * k;
   ctx.stroke();
   ctx.setLineDash([]);
+  ctx.shadowColor = 'rgba(0, 0, 0, 0.45)';
+  ctx.shadowBlur = 4 * k;
   drawHiddenLabel(ctx, x, y, w, h, 'rgba(255, 255, 255, 0.9)');
+  ctx.shadowColor = 'transparent';
+  ctx.shadowBlur = 0;
 }
 
 // Frosted glass without `ctx.filter`, which WebKit (macOS) doesn't support:
-// the area is squeezed down and drawn back up, and the canvas smoothing does
-// the blurring. It samples from a margin around the area, so the edges don't
-// fade out.
+// the area is squeezed down, smoothed with a small gaussian (three box
+// passes on the tiny image), and drawn back up. It samples from a margin
+// around the area, so the edges don't fade out.
 let veilScratch;
 function drawBlurred(ctx, x, y, w, h, k) {
-  const m = 24 * k, f = Math.round(10 * k); // margin around it; downscale = blur strength
+  const m = 24 * k, f = Math.max(4, Math.round(10 * k)); // margin around it; downscale = blur strength
   const sx = x - m, sy = y - m, sw = w + 2 * m, sh = h + 2 * m;
   if (!veilScratch) veilScratch = document.createElement('canvas');
-  veilScratch.width = Math.max(1, Math.round(sw / f));
-  veilScratch.height = Math.max(1, Math.round(sh / f));
-  const sctx = veilScratch.getContext('2d');
+  const sw2 = Math.max(1, Math.round(sw / f)), sh2 = Math.max(1, Math.round(sh / f));
+  veilScratch.width = sw2;
+  veilScratch.height = sh2;
+  const sctx = veilScratch.getContext('2d', { willReadFrequently: true });
   sctx.imageSmoothingEnabled = true;
   sctx.imageSmoothingQuality = 'high';
-  sctx.drawImage(bg, sx, sy, sw, sh, 0, 0, veilScratch.width, veilScratch.height);
+  sctx.drawImage(bg, sx, sy, sw, sh, 0, 0, sw2, sh2);
+  gaussian(sctx, sw2, sh2);
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
-  ctx.drawImage(veilScratch, 0, 0, veilScratch.width, veilScratch.height, sx, sy, sw, sh);
+  ctx.drawImage(veilScratch, 0, 0, sw2, sh2, sx, sy, sw, sh);
+}
+
+// Three box passes over the small image: together they weight the pixels
+// almost like a gaussian, which the plain down/up-scale alone doesn't
+// manage. RGBA, so the alpha channel just stays 255.
+function gaussian(ctx, w, h) {
+  const img = ctx.getImageData(0, 0, w, h);
+  const px = img.data, tmp = new Uint8ClampedArray(px.length);
+  for (let pass = 0; pass < 3; pass++) {
+    boxPass(px, tmp, w, h, true);
+    boxPass(tmp, px, w, h, false);
+  }
+  ctx.putImageData(img, 0, 0);
+}
+
+// One box blur of radius 2, horizontal or vertical, as a running sum.
+function boxPass(src, dst, w, h, horiz) {
+  const r = 2, n = 2 * r + 1, stride = 4;
+  if (horiz) {
+    for (let y = 0; y < h; y++) {
+      const row = y * w * stride;
+      for (let c = 0; c < stride; c++) {
+        let sum = 0;
+        for (let i = -r; i <= r; i++) sum += src[row + Math.min(w - 1, Math.max(0, i)) * stride + c];
+        for (let x = 0; x < w; x++) {
+          dst[row + x * stride + c] = sum / n;
+          sum += src[row + Math.min(w - 1, x + r + 1) * stride + c]
+               - src[row + Math.max(0, x - r) * stride + c];
+        }
+      }
+    }
+  } else {
+    for (let x = 0; x < w; x++) {
+      const col = x * stride;
+      for (let c = 0; c < stride; c++) {
+        let sum = 0;
+        for (let i = -r; i <= r; i++) sum += src[Math.min(h - 1, Math.max(0, i)) * w * stride + col + c];
+        for (let y = 0; y < h; y++) {
+          dst[y * w * stride + col + c] = sum / n;
+          sum += src[Math.min(h - 1, y + r + 1) * w * stride + col + c]
+               - src[Math.max(0, y - r) * w * stride + col + c];
+        }
+      }
+    }
+  }
 }
 
 // "Hidden" in the middle of an area, if it fits.
