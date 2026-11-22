@@ -20,6 +20,8 @@ done
 if ! grep -qxE "## ${version//./\\.} \([0-9]{4}-[0-9]{2}-[0-9]{2}\)" CHANGELOG.md; then
   echo "::error::CHANGELOG.md has no '## $version (YYYY-MM-DD)' entry"
   ok=false
+elif ! .github/scripts/release-notes.sh "$version" CHANGELOG.md >/dev/null; then
+  ok=false
 fi
 
 $ok && echo "Release $version: versions and changelog are consistent"

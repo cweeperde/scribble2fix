@@ -190,7 +190,18 @@ jobs:
           EOF
           rm dist/*.sig
           cat dist/latest.json
+      - uses: actions/checkout@v7
+        with:
+          path: repo
+          sparse-checkout: |
+            CHANGELOG.md
+            .github/scripts
+      # The release text is this version's section of CHANGELOG.md.
+      - name: Release notes from the changelog
+        run: |
+          repo/.github/scripts/release-notes.sh "${GITHUB_REF_NAME#v}" repo/CHANGELOG.md > notes.md
+          cat notes.md
       - uses: softprops/action-gh-release@v3
         with:
           files: dist/*
-          generate_release_notes: true
+          body_path: notes.md
