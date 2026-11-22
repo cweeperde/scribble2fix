@@ -13,3 +13,7 @@ indent_size = 4
 
 [*.md]
 trim_trailing_whitespace = false
+
+# RustRover writes run configurations without a final newline.
+[.run/*.xml]
+insert_final_newline = false
