@@ -1,0 +1,74 @@
+name: Test
+
+# Formatting, lints and unit tests on every pull request and every push to
+# main. These checks are required to merge a pull request, so there is no
+# path filter here: a required check that never starts would block the PR.
+#
+# Run the same checks locally with: cargo fmt --all --check, cargo lint, cargo test
+# The Rust version comes from rust-toolchain.toml.
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  fmt:
+    name: fmt
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - run: rustup toolchain install
+      - run: cargo fmt --all --check
+
+  test:
+    name: test (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: windows
+            os: windows-latest
+          - name: macos
+            os: macos-latest
+          - name: linux
+            os: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      # Same packages and cache as in build.yml.
+      - name: Cache Linux packages
+        if: runner.os == 'Linux'
+        uses: actions/cache@v6
+        with:
+          path: ~/apt-debs
+          key: apt-${{ matrix.os }}-${{ hashFiles('.github/workflows/build.yml') }}
+          restore-keys: apt-${{ matrix.os }}-
+
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          pkgs="libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev \
+            libxdo-dev libssl-dev patchelf libxcb1-dev libxrandr-dev libdbus-1-dev \
+            libpipewire-0.3-dev libwayland-dev libegl-dev libgbm-dev libclang-dev"
+          apt="sudo apt-get install -y -o Dir::Cache::archives=$HOME/apt-debs"
+          mkdir -p ~/apt-debs/partial
+          if ! $apt --no-download $pkgs; then
+            sudo apt-get update
+            $apt $pkgs
+          fi
+          sudo rm -rf ~/apt-debs/partial ~/apt-debs/lock
+
+      - run: rustup toolchain install
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Clippy
+        run: cargo lint
+
+      - name: Tests
+        run: cargo test --workspace --locked

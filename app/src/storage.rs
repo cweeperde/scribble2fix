@@ -88,10 +88,7 @@ pub fn load_config() -> Config {
 
 pub fn save_config(config: &Config) -> io::Result<()> {
     fs::create_dir_all(data_dir())?;
-    fs::write(
-        data_dir().join("config.json"),
-        serde_json::to_string_pretty(config)?,
-    )
+    fs::write(data_dir().join("config.json"), serde_json::to_string_pretty(config)?)
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy)]
@@ -146,12 +143,7 @@ pub struct Meta {
     pub marks: serde_json::Value,
 }
 
-pub fn save_capture(
-    annotated_png: &[u8],
-    clean_png: &[u8],
-    meta: &Meta,
-    keep: usize,
-) -> io::Result<PathBuf> {
+pub fn save_capture(annotated_png: &[u8], clean_png: &[u8], meta: &Meta, keep: usize) -> io::Result<PathBuf> {
     let name = chrono::DateTime::from_timestamp_millis(meta.captured_at_unix_ms)
         .unwrap_or_default()
         .with_timezone(&chrono::Local)
@@ -261,4 +253,34 @@ pub fn clear_request(id: &str) {
         let _ = fs::remove_file(request_file());
     }
     let _ = fs::remove_file(result_file(id));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Config, DEFAULT_HOTKEY, DEFAULT_KEEP_CAPTURES};
+
+    fn parse(json: &str) -> Config {
+        serde_json::from_str(json).unwrap()
+    }
+
+    #[test]
+    fn empty_config_is_the_default() {
+        let config = parse("{}");
+        assert_eq!(
+            serde_json::to_value(&config).unwrap(),
+            serde_json::to_value(Config::default()).unwrap()
+        );
+        assert_eq!(config.hotkey, DEFAULT_HOTKEY);
+    }
+
+    /// A config written by an older version keeps its values and gets
+    /// defaults for settings added since.
+    #[test]
+    fn old_config_keeps_its_values() {
+        let config = parse(r#"{"hotkey": "F7", "tools": ["claude"], "removed_setting": 1}"#);
+        assert_eq!(config.hotkey, "F7");
+        assert_eq!(config.tools, ["claude"]);
+        assert_eq!(config.keep_captures, DEFAULT_KEEP_CAPTURES);
+        assert!(config.auto_update && config.request_sound && !config.never_save);
+    }
 }

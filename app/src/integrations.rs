@@ -158,7 +158,10 @@ fn found(tool: &Tool, search_path: &str) -> Vec<&'static str> {
             }
         }
         Kind::Gemini => {
-            if any(&[gemini_dir().join("settings.json").is_file(), find_cli("gemini", search_path).is_some()]) {
+            if any(&[
+                gemini_dir().join("settings.json").is_file(),
+                find_cli("gemini", search_path).is_some(),
+            ]) {
                 parts.push("Gemini CLI");
             }
             if antigravity_installed(search_path) {
@@ -203,7 +206,9 @@ fn found(tool: &Tool, search_path: &str) -> Vec<&'static str> {
 /// `/Applications/<bundle>` or `~/Applications/<bundle>`.
 fn app_installed(windows_dirs: &[&str], mac_bundles: &[&str]) -> bool {
     if cfg!(windows) {
-        let Some(local) = dirs::data_local_dir() else { return false };
+        let Some(local) = dirs::data_local_dir() else {
+            return false;
+        };
         windows_dirs
             .iter()
             .any(|d| local.join("Programs").join(d).is_dir() || local.join(d).is_dir())
@@ -235,9 +240,12 @@ fn copilot_installed(search_path: &str) -> bool {
     }
     [".vscode", ".vscode-insiders"].iter().any(|d| {
         fs::read_dir(home().join(d).join("extensions")).is_ok_and(|entries| {
-            entries
-                .filter_map(|e| e.ok())
-                .any(|e| e.file_name().to_string_lossy().to_lowercase().starts_with("github.copilot"))
+            entries.filter_map(|e| e.ok()).any(|e| {
+                e.file_name()
+                    .to_string_lossy()
+                    .to_lowercase()
+                    .starts_with("github.copilot")
+            })
         })
     })
 }
@@ -293,9 +301,7 @@ fn lumo_installed(search_path: &str) -> bool {
 
 /// Lumo's account ids are its folder names: letters, digits, `-`, `_`, `=`.
 fn valid_lumo_account(id: &str) -> bool {
-    !id.is_empty()
-        && id.len() <= 128
-        && id.chars().all(|c| c.is_ascii_alphanumeric() || "-_=".contains(c))
+    !id.is_empty() && id.len() <= 128 && id.chars().all(|c| c.is_ascii_alphanumeric() || "-_=".contains(c))
 }
 
 /// Accounts signed in to Lumo: its account folders, plus the ones its log
@@ -321,7 +327,9 @@ fn lumo_accounts() -> Vec<String> {
                 if !entry.file_name().to_string_lossy().ends_with(".log") {
                     continue;
                 }
-                let Ok(text) = fs::read_to_string(entry.path()) else { continue };
+                let Ok(text) = fs::read_to_string(entry.path()) else {
+                    continue;
+                };
                 for line in text.lines() {
                     if let Some(rest) = line.split(MARKER).nth(1) {
                         ids.extend(rest.split_whitespace().next().map(String::from));
@@ -476,7 +484,10 @@ pub fn connect(id: &str) -> Result<(), String> {
             set_jsonc_server(&gemini_dir().join("settings.json"), Some(entry))?;
             install_gemini_command(&gemini_dir().join("commands"));
             let entry = json!({ "command": exe, "args": mcp_args("Antigravity") });
-            set_jsonc_server(&gemini_dir().join("config").join("mcp_config.json"), Some(entry.clone()))?;
+            set_jsonc_server(
+                &gemini_dir().join("config").join("mcp_config.json"),
+                Some(entry.clone()),
+            )?;
             // Older Antigravity versions read this one; only touched if it's there.
             let legacy = gemini_dir().join("antigravity").join("mcp_config.json");
             if legacy.is_file() {
@@ -487,7 +498,11 @@ pub fn connect(id: &str) -> Result<(), String> {
             let dir = opencode_dir();
             // Use the file the user already has; OpenCode reads both.
             let (jsonc, json) = (dir.join("opencode.jsonc"), dir.join("opencode.json"));
-            let (target, other) = if jsonc.is_file() || !json.is_file() { (jsonc, json) } else { (json, jsonc) };
+            let (target, other) = if jsonc.is_file() || !json.is_file() {
+                (jsonc, json)
+            } else {
+                (json, jsonc)
+            };
             set_opencode(&other, None)?;
             set_opencode(&target, Some(&exe))?;
             // OpenCode's command frontmatter has no `argument-hint`.
@@ -668,7 +683,9 @@ fn set_jsonc_server(file: &Path, entry: Option<Value>) -> Result<(), String> {
         Err(e) => return Err(fail(&e)),
     };
     let root = CstRootNode::parse(&old, &ParseOptions::default()).map_err(|e| fail(&e))?;
-    let obj = root.object_value_or_create().ok_or_else(|| fail(&"not a JSON object"))?;
+    let obj = root
+        .object_value_or_create()
+        .ok_or_else(|| fail(&"not a JSON object"))?;
     let servers = obj.object_value("mcpServers");
     let existing = servers.as_ref().and_then(|s| s.get("scribble2fix"));
     match (entry, existing) {
@@ -677,7 +694,9 @@ fn set_jsonc_server(file: &Path, entry: Option<Value>) -> Result<(), String> {
         (Some(entry), None) => {
             let servers = match servers {
                 Some(s) => s,
-                None => obj.object_value_or_create("mcpServers").ok_or_else(|| fail(&"mcpServers is not an object"))?,
+                None => obj
+                    .object_value_or_create("mcpServers")
+                    .ok_or_else(|| fail(&"mcpServers is not an object"))?,
             };
             servers.append("scribble2fix", to_cst(&entry));
         }
@@ -794,7 +813,9 @@ fn set_opencode(file: &Path, exe: Option<&str>) -> Result<(), String> {
         Err(e) => return Err(fail(&e)),
     };
     let root = CstRootNode::parse(&old, &ParseOptions::default()).map_err(|e| fail(&e))?;
-    let obj = root.object_value_or_create().ok_or_else(|| fail(&"not a JSON object"))?;
+    let obj = root
+        .object_value_or_create()
+        .ok_or_else(|| fail(&"not a JSON object"))?;
     let mcp = obj.object_value("mcp");
     if let Some(mcp) = &mcp {
         if let Some(p) = mcp.object_value("servers").and_then(|s| s.get("scribble2fix")) {
@@ -821,13 +842,19 @@ fn set_opencode(file: &Path, exe: Option<&str>) -> Result<(), String> {
     if let Some(exe) = exe {
         let mcp = match mcp {
             Some(mcp) => mcp,
-            None => obj.object_value_or_create("mcp").ok_or_else(|| fail(&"mcp is not an object"))?,
+            None => obj
+                .object_value_or_create("mcp")
+                .ok_or_else(|| fail(&"mcp is not an object"))?,
         };
-        let v1 = mcp.properties().iter().any(|p| p.object_value().is_some_and(|o| o.get("type").is_some()));
+        let v1 = mcp
+            .properties()
+            .iter()
+            .any(|p| p.object_value().is_some_and(|o| o.get("type").is_some()));
         let servers = if v1 {
             mcp
         } else {
-            mcp.object_value_or_create("servers").ok_or_else(|| fail(&"mcp.servers is not an object"))?
+            mcp.object_value_or_create("servers")
+                .ok_or_else(|| fail(&"mcp.servers is not an object"))?
         };
         servers.append(
             "scribble2fix",
@@ -836,7 +863,10 @@ fn set_opencode(file: &Path, exe: Option<&str>) -> Result<(), String> {
                 (
                     "command".into(),
                     CstInputValue::Array(
-                        std::iter::once(exe).chain(mcp_args("OpenCode")).map(Into::into).collect(),
+                        std::iter::once(exe)
+                            .chain(mcp_args("OpenCode"))
+                            .map(Into::into)
+                            .collect(),
                     ),
                 ),
                 // OpenCode gives up on a tool call after 5 s by default, but
@@ -930,7 +960,9 @@ pub fn refresh(config: &storage::Config) {
 /// that was ended (by an update) gets connected again. Only when the service
 /// is running: `reload` shouldn't start one.
 fn reload_opencode(search_path: &str) {
-    let Some(cli) = find_cli("opencode", search_path) else { return };
+    let Some(cli) = find_cli("opencode", search_path) else {
+        return;
+    };
     let running = command(&cli, &["service", "status"], search_path)
         .output()
         .is_ok_and(|o| o.status.success() && String::from_utf8_lossy(&o.stdout).contains("http"));
@@ -1014,7 +1046,9 @@ fn command(cli: &Path, args: &[&str], search_path: &str) -> Command {
 }
 
 fn run(cli: &Path, args: &[&str], search_path: &str) -> bool {
-    command(cli, args, search_path).output().is_ok_and(|o| o.status.success())
+    command(cli, args, search_path)
+        .output()
+        .is_ok_and(|o| o.status.success())
 }
 
 #[cfg(test)]
@@ -1027,9 +1061,14 @@ mod tests {
     #[test]
     fn jsonc_server_keeps_comments_and_position() {
         let file = std::env::temp_dir().join(format!("scribble2fix-test-jsonc-{}.json", std::process::id()));
-        let original = "{\n  // theme\n  \"theme\": \"dark\",\n  \"mcpServers\": {\n    \"a\": { \"command\": \"x\" }\n  }\n}\n";
+        let original =
+            "{\n  // theme\n  \"theme\": \"dark\",\n  \"mcpServers\": {\n    \"a\": { \"command\": \"x\" }\n  }\n}\n";
         std::fs::write(&file, original).unwrap();
-        set_jsonc_server(&file, Some(serde_json::json!({ "command": r"C:\s.exe", "args": ["mcp"], "trust": true }))).unwrap();
+        set_jsonc_server(
+            &file,
+            Some(serde_json::json!({ "command": r"C:\s.exe", "args": ["mcp"], "trust": true })),
+        )
+        .unwrap();
         set_jsonc_server(&file, Some(serde_json::json!({ "command": "/new", "args": ["mcp"] }))).unwrap();
         let text = std::fs::read_to_string(&file).unwrap();
         assert!(text.contains("// theme"));
@@ -1038,19 +1077,27 @@ mod tests {
         assert_eq!(v["mcpServers"]["scribble2fix"]["command"], "/new");
         assert_eq!(v["mcpServers"]["a"]["command"], "x");
         set_jsonc_server(&file, None).unwrap();
-        assert_eq!(parse_jsonc(&std::fs::read_to_string(&file).unwrap()), parse_jsonc(original));
+        assert_eq!(
+            parse_jsonc(&std::fs::read_to_string(&file).unwrap()),
+            parse_jsonc(original)
+        );
         // Missing file: created on connect, left missing on disconnect.
         let _ = std::fs::remove_file(&file);
         set_jsonc_server(&file, None).unwrap();
         assert!(!file.exists());
         set_jsonc_server(&file, Some(serde_json::json!({ "command": "x" }))).unwrap();
-        assert_eq!(parse_jsonc(&std::fs::read_to_string(&file).unwrap())["mcpServers"]["scribble2fix"]["command"], "x");
+        assert_eq!(
+            parse_jsonc(&std::fs::read_to_string(&file).unwrap())["mcpServers"]["scribble2fix"]["command"],
+            "x"
+        );
         let _ = std::fs::remove_file(&file);
     }
 
     #[test]
     fn lumo_account_ids_and_command_body() {
-        assert!(valid_lumo_account("zqvrSYpNUFhRJOSZ36IgMmsRYD9-zuE8Qm7cepG1b1KP5Qd79P6Zp3J2loGlHu_Fqn_xtKq3PblTLsH6NQAxKA=="));
+        assert!(valid_lumo_account(
+            "zqvrSYpNUFhRJOSZ36IgMmsRYD9-zuE8Qm7cepG1b1KP5Qd79P6Zp3J2loGlHu_Fqn_xtKq3PblTLsH6NQAxKA=="
+        ));
         assert!(!valid_lumo_account("../evil") && !valid_lumo_account("") && !valid_lumo_account("a b"));
         let body = command_body();
         assert!(body.starts_with("Call the scribble2fix") && !body.contains("$ARGUMENTS") && !body.contains("---"));
@@ -1064,7 +1111,10 @@ mod tests {
         set_claude_permission(&file, true).unwrap();
         set_claude_permission(&file, true).unwrap();
         let v: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&file).unwrap()).unwrap();
-        assert_eq!(v["permissions"]["allow"], serde_json::json!(["Bash(ls)", "mcp__scribble2fix"]));
+        assert_eq!(
+            v["permissions"]["allow"],
+            serde_json::json!(["Bash(ls)", "mcp__scribble2fix"])
+        );
         set_claude_permission(&file, false).unwrap();
         let v: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&file).unwrap()).unwrap();
         assert_eq!(v, serde_json::from_str::<serde_json::Value>(original).unwrap());
