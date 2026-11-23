@@ -2,6 +2,10 @@
 
 All notable changes to Scribble2Fix. Downloads for every version are on the [releases page](https://github.com/cweeperde/scribble2fix/releases).
 
+## Unreleased
+
+- The settings window always opens on the **General** tab again, no matter which tab was open last.
+
 ## 1.1.5 (2026-11-22)
 
 - macOS: when an AI tool asks for a scribble right after Scribble2Fix starts, the glowing frame goes around the whole screen and the request card shows up at once. Before, the frame covered only about half the screen until you pressed **Draw now**.

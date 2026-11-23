@@ -132,17 +132,14 @@
 <script>
 const $ = (id) => document.getElementById(id);
 
-// Tabs; the last one used opens again next time.
-const store = { get: (k) => { try { return localStorage.getItem(k); } catch { return null; } },
-                set: (k, v) => { try { localStorage.setItem(k, v); } catch {} } };
+// Tabs; always starts on General.
 function showPage(id) {
   if (!$(id)) id = 'general';
   for (const b of document.querySelectorAll('nav button')) b.classList.toggle('on', b.dataset.page === id);
   for (const p of document.querySelectorAll('.page')) p.classList.toggle('on', p.id === id);
-  store.set('settings-page', id);
 }
 for (const b of document.querySelectorAll('nav button')) b.onclick = () => showPage(b.dataset.page);
-showPage(store.get('settings-page') || 'general');
+showPage('general');
 
 async function load() {
   const s = await invoke('get_settings');
