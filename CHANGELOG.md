@@ -5,6 +5,7 @@ All notable changes to Scribble2Fix. Downloads for every version are on the [rel
 ## Unreleased
 
 - The settings window always opens on the **General** tab again, no matter which tab was open last.
+- Hidden areas (**R** tool): every instruction the AI receives now strictly forbids it to look at, reconstruct, guess or search for the hidden content, with no exceptions.
 
 ## 1.1.5 (2026-11-22)
 

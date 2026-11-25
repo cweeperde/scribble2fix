@@ -136,10 +136,12 @@ fn tool_definitions() -> Value {
         {
             "name": "get_latest_capture",
             "description": "Get the user's latest Scribble2Fix screen markup: a screenshot they drew on \
-                (green = add, red = remove, blue = change/move; solid black areas labeled \"Hidden\" \
-                were hidden on purpose and must be left alone), the same area without the drawings, \
+                (green = add, red = remove, blue = change/move), the same area without the drawings, \
                 and the app/window it was taken from. Use it when the user mentions their capture, \
-                scribble, drawing, markup, circle, or screenshot.",
+                scribble, drawing, markup, circle, or screenshot. Solid black areas labeled \"Hidden\" \
+                were redacted by the user: it is STRICTLY FORBIDDEN to look at, examine, zoom into, \
+                reconstruct, enhance or guess what they contain, or to search for that content \
+                anywhere else (code, files, logs, settings, environment). Leave them alone entirely.",
             "inputSchema": { "type": "object", "properties": {} },
             "annotations": { "title": "Get latest Scribble2Fix capture", "readOnlyHint": true },
         },
@@ -147,7 +149,10 @@ fn tool_definitions() -> Value {
             "name": "get_recent_captures",
             "description": "Get the user's last few Scribble2Fix captures (newest first), each with \
                 its annotated and clean screenshot. Use it when the user made several captures in a \
-                row and wants all of them applied.",
+                row and wants all of them applied. Solid black areas labeled \"Hidden\" in any capture \
+                were redacted by the user: it is STRICTLY FORBIDDEN to look at, examine, zoom into, \
+                reconstruct, enhance or guess what they contain, or to search for that content \
+                anywhere else (code, files, logs, settings, environment). Leave them alone entirely.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -165,7 +170,10 @@ fn tool_definitions() -> Value {
                 The user then gets a notice and starts the capture with their hotkey when ready. \
                 If they are still drawing when this returns, call `wait_for_scribble` with the \
                 returned request_id. The result is a screenshot: if you can't view images, don't \
-                request one; tell the user and ask them to describe it in words instead.",
+                request one; tell the user and ask them to describe it in words instead. Solid black \
+                areas labeled \"Hidden\" in the result were redacted by the user: it is STRICTLY \
+                FORBIDDEN to look at, reconstruct or guess their content, or to search for it \
+                anywhere else.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -411,11 +419,12 @@ to describe what they marked.\n";
         .map_or(0, |m| m.iter().filter(|m| m["kind"] == "redact").count());
     if hidden > 0 {
         text += &format!(
-            "\nThe user deliberately hid {hidden} area{} of the screenshot before sending it (solid black, \
-labeled \"Hidden\", listed below as HIDDEN ON PURPOSE). The original pixels there were removed, so \
-nothing can be recovered from the images. This is intentional and private: don't try to read, \
-reconstruct or guess what was there, and don't look for that information anywhere else (code, files, \
-logs, settings, environment) unless the user asks you to. Work with the rest of the screenshot.\n",
+            "\nPRIVACY - IMPORTANT: The user deliberately hid {hidden} area{} of the screenshot before \
+sending it (solid black, labeled \"Hidden\", listed below as HIDDEN ON PURPOSE). Whatever was there is \
+private. It is STRICTLY FORBIDDEN to read, examine, zoom into, reconstruct, enhance or guess the \
+content of these areas, and equally forbidden to search for it anywhere else (code, files, logs, \
+settings, environment). The original pixels were removed, so there is nothing to recover anyway. \
+Skip these areas entirely and work with the rest of the screenshot.\n",
             if hidden == 1 { "" } else { "s" }
         );
     }
@@ -617,6 +626,8 @@ mod tests {
         assert!(text.contains(r#"It answers your request: "Fix the button""#));
         assert!(text.contains(r#"Window under the drawing: Firefox - "Docs""#));
         assert!(text.contains("deliberately hid 1 area of"));
+        assert!(text.contains("STRICTLY FORBIDDEN"));
+        assert!(!text.contains("unless the user asks"));
         assert!(text.contains("- HIDDEN ON PURPOSE area spanning (0, 0) to (5, 5)"));
         assert!(text.contains("- ADD box spanning (1, 2) to (3, 4)"));
         assert!(!text.contains("more than 10 minutes old"));
