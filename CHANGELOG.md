@@ -2,7 +2,7 @@
 
 All notable changes to Scribble2Fix. Downloads for every version are on the [releases page](https://github.com/cweeperde/scribble2fix/releases).
 
-## Unreleased
+## 1.1.6 (2026-11-25)
 
 - The settings window always opens on the **General** tab again, no matter which tab was open last.
 - macOS: while you draw a hidden area it's blurred again — the blur effect was ignored there. Hidden areas now look like frosted glass on every system.
